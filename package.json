@@ -9,6 +9,9 @@
         "pretest": "jasmine init; ((ps aux | grep p2p-load-test | grep -v grep) && pkill p2p-load-test); npm start &",
         "posttest": "pkill p2p-load-test"
     },
+    "engines": {
+        "node": "10.x"
+    },
     "dependencies": {
         "puppeteer": "^2.0.0",
         "ws": "^7.2.1"

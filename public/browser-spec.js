@@ -9,6 +9,8 @@ function uuidv4() { // Not crypto strong, but good enough for prototype.
 }
 
 describe('browser side', function () {
+    const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
+    const wsSite = protocol + "//" + location.host;
     beforeAll(function (done) { // Give puppeteer a chance to hook into reporters.
         setTimeout(_ => done(), 1000);
     });
@@ -84,9 +86,9 @@ describe('browser side', function () {
     describe('web socket', function () {
         var wsA, wsB
         beforeAll(function (done) { // Wait for open before starting tests.
-            wsA = new WebSocket('ws://localhost:8443/A');
+            wsA = new WebSocket(`${wsSite}/A`);
             wsA.onopen = _ => {
-                wsB = new WebSocket('ws://localhost:8443/B');
+                wsB = new WebSocket(`${wsSite}/B`);
                 wsB.onopen = done;
             };
         });
@@ -211,8 +213,6 @@ describe('browser side', function () {
                 }
             };
         }
-        const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
-        const wsSite = protocol + "//" + location.host;
         it('loopback', testDataStreams(null, LoopbackRTC));
         it('web socket', testDataStreams([_ => new WebSocket(`${wsSite}/${id1}`),
                                           _ => new WebSocket(`${wsSite}/${id2}`)],
