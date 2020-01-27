@@ -5,7 +5,7 @@ const BASE = 'http://localhost:8443';
 describe('browser', function () {
     var fail = true;
     beforeAll(async done => { // Give puppeteer a chance to hook into reporters.
-        const browser = await puppeteer.launch({headless: true});
+        const browser = await puppeteer.launch({headless: false});
         const page = await browser.newPage();
         await page.goto(BASE + '/SpecRunner.html');
         page.on('console', msg => console.info(msg.text()));
