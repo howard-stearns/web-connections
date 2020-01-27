@@ -14,9 +14,9 @@ describe('browser side', function () {
     beforeAll(function (done) { // Give puppeteer a chance to hook into reporters.
         setTimeout(_ => done(), 1000);
     });
-    describe('event source', function () {
+    describe('event source', function () {        
         var eventSource, eventHandler;
-        var target='target', source='source', type='foo';        
+        var target = uuidv4(), source = uuidv4(), type = 'foo';        
         beforeAll(function (done) { // Wait for open before starting tests.
             eventSource = new EventSource(`/messages?id=${target}`);
             eventSource.onopen = done;
@@ -62,7 +62,8 @@ describe('browser side', function () {
             for (const p of payloads) await sendMessage(p);
         });
         it('distinguishes by id', function (done) {
-            const second = new EventSource('/messages?id=second');
+            const secondId = uuidv4();
+            const second = new EventSource(`/messages?id=${secondId}`);
             second.onopen = _ => {
                 Promise.all([
                     new Promise(resolve => {
@@ -78,17 +79,17 @@ describe('browser side', function () {
                         };
                     })
                 ]).then(done);
-                sendMessage('for1', null, target, 'second')
-                sendMessage('for2', null, 'second', target)
+                sendMessage('for1', null, target, secondId)
+                sendMessage('for2', null, secondId, target)
             };
         });
     });
     describe('web socket', function () {
-        var wsA, wsB
+        var wsA, wsB, a = uuidv4(), b = uuidv4();
         beforeAll(function (done) { // Wait for open before starting tests.
-            wsA = new WebSocket(`${wsSite}/A`);
+            wsA = new WebSocket(`${wsSite}/${a}`);
             wsA.onopen = _ => {
-                wsB = new WebSocket(`${wsSite}/B`);
+                wsB = new WebSocket(`${wsSite}/${b}`);
                 wsB.onopen = done;
             };
         });
@@ -98,17 +99,17 @@ describe('browser side', function () {
         function sendMessage(payload, to, from, type = '') {
             const data = {from: from, to: to, data: payload};
             if (type) data.type = type;
-            ((from === 'A') ? wsA : wsB).send(JSON.stringify(data));
+            ((from === a) ? wsA : wsB).send(JSON.stringify(data));
         }
         it('loops back messages', function (done) {
             const payload = 'payload1';
             wsB.onmessage = event => {
                 const message = JSON.parse(event.data);
                 expect(message.data).toBe(payload);
-                expect(message.from).toBe('A');
+                expect(message.from).toBe(a);
                 done();
             };
-            sendMessage(payload, 'B', 'A');
+            sendMessage(payload, b, a);
         });
         it('delivers in order', async function (done) {
             var payloads = ['a', 'b', 'c', 'd', 'e', 'f'], received = 0;
@@ -117,7 +118,7 @@ describe('browser side', function () {
                 expect(message.data).toBe(payloads[received++]);
                 if (received >= payloads.length) done();
             };
-            for (const p of payloads) await sendMessage(p, 'B', 'A');
+            for (const p of payloads) await sendMessage(p, b, a);
         });
         it('distinguishes by id', function (done) {
             Promise.all([
@@ -126,7 +127,7 @@ describe('browser side', function () {
                         const message = JSON.parse(event.data);
                         expect(message.data).toBe('for2');
                         expect(message.type).toBe('y');
-                        expect(message.from).toBe('A');
+                        expect(message.from).toBe(a);
                         resolve();
                     };
                 }),
@@ -135,13 +136,13 @@ describe('browser side', function () {
                         const message = JSON.parse(event.data);
                         expect(message.data).toBe('for1');
                         expect(message.type).toBe('x');
-                        expect(message.from).toBe('B');
+                        expect(message.from).toBe(b);
                         resolve();
                     };
                 })
             ]).then(done);
-            sendMessage('for1', 'A', 'B', 'x');
-            sendMessage('for2', 'B', 'A', 'y');
+            sendMessage('for1', a, b, 'x');
+            sendMessage('for2', b, a, 'y');
         });
     });
     
