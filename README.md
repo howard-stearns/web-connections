@@ -25,9 +25,9 @@ initial PoC development
 The test suite at /SpecRunner.html checks five things:
 1. Do WebSockets work from the browser to the given server and back?
 2. Does EventSource work from the given server to this browser?
-3. Can an RTC dataChannel be established from this browser another peer in the same browser, using direct loopback signalling?
-4. Can an RTC dataChannel be established from this browser another peer in the same browser, using WebSockets for signalling?
-5. Can an RTC dataChannel be established from this browser another peer in the same browser, using EventSource (SSE) for signalling?
+3. Can an RTC dataChannel be established from this browser to another peer in the same browser, using direct loopback signalling?
+4. Can an RTC dataChannel be established from this browser to another peer in the same browser, using WebSockets for signalling?
+5. Can an RTC dataChannel be established from this browser to another peer in the same browser, using EventSource (SSE) for signalling?
 
 So far:
 
@@ -36,9 +36,6 @@ This is using the default ICE servers built into the browsers. Presumably does N
 These results repeat using two different hosts:
 - [Azure using http (not https)](http://52.183.27.25:8443/SpecRunner.html)
 - [Heroku using https](https://intense-savannah-20051.herokuapp.com/SpecRunner.html)
-
-### Wifi client
-
 
 ### Wifi client
 
