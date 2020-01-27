@@ -54,9 +54,9 @@ These results repeat using two different hosts:
 
 |            | Windows 10/Edge 79 | OSX 10.15/Safari 13 | iOS 13.3/Safari | Pixel Android 10/Chrome 79|
 |-----------:|:------------------:|:-------------------:|:---------------:|:-------------------------:|
-|WebSockets  |?                   |yes                  |yes              |?                          |
-|EventSource |?                   |yes                  |yes              |?                          |
-|rtc/loopback|?                   |yes                  |*no*             |?                          |
-|rtc/ws      |?                   |yes                  |*no*             |?                          |
-|rtc/SSE     |?                   |yes                  |*no*             |?                          |
+|WebSockets  |? - please try      |yes                  |yes              |? - please try             |
+|EventSource |? links above       |yes                  |yes              |?   links above            |
+|rtc/loopback|? while tethered    |yes                  |**no**           |?   and tell me            |
+|rtc/ws      |? and tell me       |yes                  |**no**           |?   what you get           |
+|rtc/SSE     |? what you get      |yes                  |**no**           |?                          |
 
