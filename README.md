@@ -48,7 +48,7 @@ These results repeat using two different hosts:
 |EventSource |yes                 |yes                  |yes              |yes                        |
 |rtc/loopback|yes                 |yes                  |yes              |yes                        |
 |rtc/ws      |yes                 |yes                  |yes              |yes                        |
-|rtc/SSE     |yes                 |yes                  |_not reliable_   |yes                        |
+|rtc/SSE     |yes                 |yes                  |_NOT RELIABLE_   |yes                        |
 
 ### Cellular client
 
@@ -56,7 +56,7 @@ These results repeat using two different hosts:
 |-----------:|:------------------:|:-------------------:|:---------------:|:-------------------------:|
 |WebSockets  |? - please try      |yes                  |yes              |? - please try             |
 |EventSource |? links above       |yes                  |yes              |?   links above            |
-|rtc/loopback|? while tethered    |yes                  |**no**           |?   and tell me            |
-|rtc/ws      |? and tell me       |yes                  |**no**           |?   what you get           |
-|rtc/SSE     |? what you get      |yes                  |**no**           |?                          |
+|rtc/loopback|? while tethered    |yes                  |**NO**           |?   and tell me            |
+|rtc/ws      |? and tell me       |yes                  |**NO**           |?   what you get           |
+|rtc/SSE     |? what you get      |yes                  |**NO**           |?                          |
 
