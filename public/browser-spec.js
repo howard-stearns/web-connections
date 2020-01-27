@@ -260,7 +260,7 @@ describe('browser side', function () {
             function run(done) {
                 if (!(('mediaDevices' in navigator) &&
                       ('getUserMedia' in navigator.mediaDevices))) {
-                    return pending();
+                    return done();
                 }
                 navigator.mediaDevices
                     .getUserMedia({video: true, audio: true})
