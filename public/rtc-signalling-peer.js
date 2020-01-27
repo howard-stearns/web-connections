@@ -142,13 +142,15 @@ class EventSourceRTC extends RTCSignallingPeer {
     forwarder(messageEvent) {
         const message = JSON.parse(messageEvent.data);
         if (message.from !== this.peerId) return;
-        const messageData = JSON.parse(decodeURIComponent(message.data)); // decoding is temporary. See below.
+        const messageData = JSON.parse(message.data);
         this[messageEvent.type](messageData);
     }
     p2pSend(type, message) {
         const data = JSON.stringify(message);
-        // TODO: make server accept a JSON POST of this, rather than encoding in the GET URL
-        // When I change the server side, I'll update this code to correspond. No application code changes will be needed.
-        fetch(`/message?type=${type}&from=${this.id}&to=${this.peerId}&data=${encodeURIComponent(data)}`);
+        fetch('/message', {
+            method: 'post',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type, from: this.id, to: this.peerId, data})
+        });
     }
 }

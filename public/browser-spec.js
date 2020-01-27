@@ -25,8 +25,17 @@ describe('browser side', function () {
             eventSource.onmessage = null;
         });
         function sendMessage(payload, type = '', to = target, from = source) {
-            return fetch(`/message?to=${to}&from=${from}&data=${payload}${type ? `&type=${type}` : ''}`)
-                .then(response => expect(response.status).toBe(200));
+            const body = {
+                to: to,
+                from: from,
+                data: payload
+            };
+            if (type) body.type = type;
+            return fetch('/message', {
+                method: 'post',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            }).then(response => expect(response.status).toBe(200));
         }
         it('loops back messages', function (done) {
             const payload = 'payload1';
@@ -146,9 +155,7 @@ describe('browser side', function () {
         });
     });
     
-    describe('signalling', function () {
-        // Base class to be completed by super that handles tramission of signals.
-        // Given that, this will negotiate when adding a track or data channel, and renegotiate as needed.
+    describe('data stream signalling', function () {
         var connection1, connection2;
         var pipe1, pipe2;
         const id1 = uuidv4();
@@ -173,7 +180,8 @@ describe('browser side', function () {
         });
         function testDataStreams(thunks, peerClass, done) {
             function run(done) {
-                const timerLabel = peerClass.name + ' channel open';
+                const setupLabel = peerClass.name + ' channel open';
+                const pingLabel = peerClass.name + ' ping roundtrip';
                 connection1 = new peerClass(pipe1, id1, id2);
                 connection2 = new peerClass(pipe2, id2, id1);
                 connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
@@ -189,18 +197,94 @@ describe('browser side', function () {
                         channel2.send('pong');
                     };
                 };
-                console.time(timerLabel);
+                console.time(setupLabel);
                 const channel1 = connection1.peer.createDataChannel('1:2', null);
                 channel1.onopen = _ => {
-                    console.timeEnd(timerLabel);
+                    console.timeEnd(setupLabel);
+                    console.time(pingLabel)
                     channel1.send('ping');
                 };
                 channel1.onmessage = event => {
+                    console.timeEnd(pingLabel);
                     console.log('channel1 got', event.data);
                     expect(event.data).toBe('pong');
                     done();
                 };
                 channel1.onerror = e => console.log('fixme channel1 error', e);
+            }
+            return function (done) {
+                if (thunks) {
+                    pipe1 = thunks[0]();
+                    pipe1.onopen = _ => {
+                        pipe2 = thunks[1]();
+                        pipe2.onopen = _ => run(done);
+                    }
+                } else {
+                    run(done);
+                }
+            };
+        }
+        it('loopback', testDataStreams(null, LoopbackRTC));
+        it('web socket', testDataStreams([_ => new WebSocket(`${wsSite}/${id1}`),
+                                          _ => new WebSocket(`${wsSite}/${id2}`)],
+                                         WebSocketRTC));
+        it('event stream', testDataStreams([_ => new EventSource(`/messages?id=${id1}`),
+                                            _ => new EventSource(`/messages?id=${id2}`)],
+                                           EventSourceRTC));
+
+    });
+    describe('media stream signalling', function () {
+        var connection1, connection2;
+        var pipe1, pipe2;
+        const id1 = uuidv4();
+        const id2 = uuidv4();
+        afterEach(function () {
+            if (pipe1) {
+                pipe1.close();
+                pipe1 = null;
+            }
+            if (pipe2) {
+                pipe2.close();
+                pipe2 = null;
+            }
+            if (connection1) {
+                connection1.peer.close();
+                connection1 = null;
+            }
+            if (connection2) {
+                connection2.peer.close();
+                connection2 = null;
+            }
+        });
+        function testDataStreams(thunks, peerClass, done) {
+            function run(done) {
+                navigator.mediaDevices
+                    .getUserMedia({video: true, audio: true})
+                    .then(stream => {
+                        if (!stream) return fail('No media stream');
+                        const setupLabel = peerClass.name + ' channel open';                        
+                        const tracks = {};
+                        var trackCount = 2;
+                        connection1 = new peerClass(pipe1, id1, id2);
+                        connection2 = new peerClass(pipe2, id2, id1);
+                        connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
+                        connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
+                        connection2.peer.addEventListener('track', event => {
+                            const track = event.track,
+                                  trackId = track.id;
+                            expect(track.id).toBe(tracks[track.kind]);
+                            if (--trackCount <= 0) {
+                                console.timeEnd(setupLabel);
+                                done();
+                            }
+                        });
+                        console.time(setupLabel);
+                        stream.getTracks().forEach(track => {
+                            tracks[track.kind] = track.id;
+                            connection1.peer.addTrack(track, stream);
+                        });
+                    },
+                          error => fail(error));
             }
             return function (done) {
                 if (thunks) {

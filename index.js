@@ -1,49 +1,16 @@
 'use strict';
 const PORT = process.env.PORT || 8443;
-const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const url = require('url');
-const WebSocket = require('ws');
-
+const express = require('express');
+const bodyParser = require('body-parser');
 
 process.title = "p2p-load-test";
-
-// The node-static package does this better, but we don't need that here.
-const mime = {
-    ".htm": "text/html",
-    ".html": "text/html",
-    ".js": "application/javascript"
-};
-function serveStatic(pathname, req, res) {
-    fs.readFile(__dirname + "/public" + pathname, function (err, data) {
-        if (err) return routes['/404'](req, res);
-        res.writeHead(200, {'Content-Type': mime[path.extname(pathname)] || 'text/plain'});
-        res.end(data);
-    })
-}
-
-// The express framework has much more general ways to do this, but we don't need that either.
-const routes = {};
-function router(req, res) {
-    const parsed = req.parsedUrl = url.parse(req.url, true); // Set in req to make it vailable to handlers.
-    const pathname = parsed.pathname,
-          handler = routes[pathname];
-    console.log(new Date(), pathname, (handler ? 'code' : 'static'));
-    if (handler) return handler(req, res);
-    serveStatic(pathname, req, res);
-}
-
-
-routes['/404'] = function (req, res) {
-    console.log(req.url, 'not found');
-    res.writeHead(404, {'Content-Type': 'text/plain'});
-    res.end("Not found: " + req.url);
-};
-routes['/'] = function (req, res) {
-    serveStatic('/index.html', req, res);
-};
-
+const app = express();
+const expressWs = require('express-ws')(app);
+app.use(express.static('public'));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({extended: true}));
 
 /*
 P2P Message Proxy
@@ -81,20 +48,18 @@ function heartbeatSSE(res, comment = '') {
     res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
     res.flushHeaders();    
 }
-routes['/message'] = function (req, res) {
-    // TODO: Handle posted form encoding instead of just query params
-    const query = req.parsedUrl.query;
-    const clientPipe = registrants[query.to];
+app.post('/message', function (req, res) {
+    const clientPipe = registrants[req.body.to];
     if (!clientPipe) return routes['/404'](req, res);
     // Alas, the EventSource standard does not provide a 'scope' field with which the client
     // can direct the data to the right client-side target, so we have to embed that in data.
-    const message = {from: query.from, data: query.data};
-    sendSSE(clientPipe, message, query.type);
+    const message = {from: req.body.from, data: req.body.data};
+    sendSSE(clientPipe, message, req.body.type);
     res.end(); // TODO: When we do message ids, it would be nice to return that.
-};
+});
 
-routes['/messages'] = function (req, res) {
-    const id = req.parsedUrl.query.id;
+app.get('/messages', function (req, res) {
+    const id = req.query.id;
     // SSE headers and http status to keep connection open
     // TODO: heartbeat
     // TODO: reject requests that don't accept this content-type.
@@ -118,15 +83,11 @@ routes['/messages'] = function (req, res) {
     //sendSSE(res, Object.keys(registrants)); // FIXME: don't do while trying to debug, and don't do after we add id to registrants
     heartbeatSSE(res); // comment forces open event on other end
     
-}
+});
 
-const server = http.createServer(router);
-
-const wss = new WebSocket.Server({ server });
 const wsRegistrants = {};
-wss.on('connection', function (ws, req) {
-    const parsed = url.parse(req.url);
-    const id = parsed.pathname.slice(1);
+app.ws('/:id', function (ws, req) {
+    const id = req.params.id;
     wsRegistrants[id] = ws;
     ws.on('message', function (data) {
         const message = JSON.parse(data);
@@ -145,4 +106,4 @@ wss.on('connection', function (ws, req) {
     });
 });
 
-server.listen(PORT);
+app.listen(PORT);
