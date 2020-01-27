@@ -1,0 +1,36 @@
+{
+    "name": "web-connections",
+    "version": "0.0.1",
+    "description": "Test bed for investigating p2p connectivity between web pages",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "test": "jasmine",
+        "pretest": "jasmine init; ((ps aux | grep p2p-load-test | grep -v grep) && pkill p2p-load-test); npm start &",
+        "posttest": "pkill p2p-load-test"
+    },
+    "dependencies": {
+        "puppeteer": "^2.0.0",
+        "ws": "^7.2.1"
+    },
+    "devDependencies": {
+        "jasmine": "^3.5.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/howard-stearns/web-connections.git"
+    },
+    "keywords": [
+        "p2p",
+        "webRTC",
+        "connectivity",
+        "rendezvous",
+        "signalling"
+    ],
+    "author": "High Fidelity",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/howard-stearns/web-connections/issues"
+    },
+    "homepage": "https://github.com/howard-stearns/web-connections#readme"
+}
