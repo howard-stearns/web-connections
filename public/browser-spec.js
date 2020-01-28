@@ -275,8 +275,8 @@ describe('browser side', function () {
                         connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
                         connection2.peer.addEventListener('track', event => {
                             const track = event.track,
-                                  trackId = track.id;
-                            expect(track.id).toBe(tracks[track.kind]);
+                                  trackId = event.streams[0].id;
+                            expect(trackId).toBe(tracks[track.kind]);
                             if (--trackCount <= 0) {
                                 console.timeEnd(setupLabel);
                                 done();
@@ -284,7 +284,7 @@ describe('browser side', function () {
                         });
                         console.time(setupLabel);
                         stream.getTracks().forEach(track => {
-                            tracks[track.kind] = track.id;
+                            tracks[track.kind] = stream.id; // Stream id is same at both ends. Track id is not.
                             connection1.peer.addTrack(track, stream);
                         });
                     },
