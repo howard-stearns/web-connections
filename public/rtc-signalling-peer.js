@@ -11,14 +11,14 @@ class RTCSignallingPeer {
         peer.onnegotiationneeded = _ => this.negotiationneeded();
         peer.onicecandidate = event => event.candidate && this.p2pSend('icecandidate', event.candidate)
         
-        //peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
-        //peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
+        peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
+        peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
         //peer.oniceconnectionstatechange = _ => console.log(this.id, 'ice connection state', peer.iceConnectionState);
         //peer.onicegatheringstatechange = _ => console.log(this.id, 'ice gathering state', peer.iceGatheringState);
     }
     icecandidate(iceCandidate) { // We have been signalled by the other end about a new candidate.
         this.peer.addIceCandidate(iceCandidate)
-            .catch(e => console.error('CONNECTION ADD ICE FAILED', this.id, e.name, e.message));
+            .catch(e => setTimeout(_ => alert('CONNECTION ADD ICE FAILED', this.id, e.name, e.message), 0));
     }
     // When we add a stream or channel, or conditions change, we get this event to (re)start the signalling process.
     negotiationneeded() {
@@ -133,7 +133,20 @@ The server provides two endpoints:
   /message?type=W&to=X&from=Y&data=Z - Server routes the data to X's event source.
 */
 
+function debug(...args) {
+    console.error(...args);
+    setTimeout(_ => alert([...args].map(x => (typeof x === 'object') ? JSON.stringify(x) : x).join(' ')), 0);
+}
+
 const history = {};
+// Takes a f(...args) => promise into a f(..args) that does so one a time.
+function serializePromises(make1Promise) {
+    let last = Promise.resolve();
+    return function (...args) {
+        last = last.catch(_ => _).then(_ => make1Promise(...args));
+        return last;
+    }
+}
 class EventSourceRTC extends RTCSignallingPeer {
     constructor(eventSource, ourId, peerId, iceServers = null, constraints = null) {
         super(ourId, peerId, iceServers, constraints);
@@ -145,10 +158,11 @@ class EventSourceRTC extends RTCSignallingPeer {
         if (message.from !== this.peerId) return;
         console.log(messageEvent);
         const sent = history[this.id].shift();
-        if (parseInt(messageEvent.lastEventId, 10) !== this.lastId) console.error(`out of order id ${messageEvent.lastEventId} expected ${this.lastId}\n${sent}\n${messageEvent.data}`);
+        if (parseInt(messageEvent.lastEventId, 10) !== this.lastId)
+            debug(`out of order id ${messageEvent.lastEventId} expected ${this.lastId}\n${sent}\n${messageEvent.data}`);
         this.lastId++;
         if (sent !== messageEvent.data) {
-            console.error(`mismatch id:${messageEvent.lastEventId}\n${sent}\n${messageEvent.data}`);
+            debug(`mismatch id:${messageEvent.lastEventId}\n${sent}\n${messageEvent.data}`);
         } else {
             console.log(`  ok: ${sent.slice(0, 80)}...`);
         }
@@ -158,16 +172,21 @@ class EventSourceRTC extends RTCSignallingPeer {
         const body = JSON.stringify({type, from: this.id, to: this.peerId, data: message});
         history[this.peerId].push(body);
         const sendingId = this.sendingId++;
-        fetch('/message', {
-            method: 'post',
-            headers: {'Content-Type': 'application/json'},
-            body: body
-        })
+        return EventSourceRTC.poster(body)
             .then(response => response.json())
             .then(result => {
                 if (result.id !== sendingId) {
-                    console.error(`Offered as ${sendingId} but became ${result.id}: ${JSON.stringify(message).slice(0, 100)}...`);
+                    debug(`Offered as ${sendingId} but became ${result.id}: ${JSON.stringify(message).slice(0, 100)}...`);
                 }
             });
     }
 }
+function post1(body) {
+    return fetch('/message', {
+        method: 'post',
+        headers: {'Content-Type': 'application/json'},
+        body: body
+    });
+}
+EventSourceRTC.poster = serializePromises(post1);
+                                          

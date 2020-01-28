@@ -189,7 +189,7 @@ describe('browser side', function () {
                 connection2.peer.ondatachannel = event => {
                     const channel2 = event.channel;
                     console.log('channel2 got data channel');
-                    channel2.onerror = e => console.log('fixme channel2 error', e);
+                    channel2.onerror = e => debug('fixme channel2 error', e);
                     channel2.onopen = _ => console.log('fixme channel2 open');
                     channel2.onmessage = event => {
                         console.log('channel2 got', event.data);
@@ -210,7 +210,7 @@ describe('browser side', function () {
                     expect(event.data).toBe('pong');
                     done();
                 };
-                channel1.onerror = e => console.log('fixme channel1 error', e);
+                channel1.onerror = e => debug('fixme channel1 error', e);
             }
             return function (done) {
                 if (thunks) {
@@ -273,22 +273,30 @@ describe('browser side', function () {
                         connection2 = new peerClass(pipe2, id2, id1);
                         connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
                         connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
+                        function checkConnected() {
+                            if ((connection1.peer.connectionState === 'connected')
+                                && (connection2.peer.connectionState === 'connected'))
+                                done();
+                        }
+                        connection1.peer.onconnectionstatechange = checkConnected;
+                        connection2.peer.onconnectionstatechange = checkConnected;
+                        
                         connection2.peer.addEventListener('track', event => {
                             const track = event.track,
                                   trackId = event.streams[0].id;
                             expect(trackId).toBe(tracks[track.kind]);
                             if (--trackCount <= 0) {
                                 console.timeEnd(setupLabel);
-                                done();
                             }
                         });
+
                         console.time(setupLabel);
                         stream.getTracks().forEach(track => {
                             tracks[track.kind] = stream.id; // Stream id is same at both ends. Track id is not.
                             connection1.peer.addTrack(track, stream);
                         });
                     },
-                          error => { console.log(error); done();});
+                          error => { debug(error); done();});
             }
             return function (done) {
                 if (thunks) {
