@@ -50,7 +50,7 @@ function heartbeatSSE(res, comment = '') {
 }
 app.post('/message', function (req, res) {
     const clientPipe = registrants[req.body.to];
-    if (!clientPipe) return routes['/404'](req, res);
+    if (!clientPipe) return res.status(404).send("Not found");
     // Alas, the EventSource standard does not provide a 'scope' field with which the client
     // can direct the data to the right client-side target, so we have to embed that in data.
     const message = {from: req.body.from, data: req.body.data};
@@ -98,6 +98,11 @@ app.ws('/:id', function (ws, req) {
         }
         console.log(new Date(), 'message', message.type || 'data', (destination ? 'ok' : 'missing'));
         if (!destination) return ws.terminate(); // Just close the connection, just as if client were directly connected to the destination.
+        if (destination.readyState !== ws.OPEN) {
+            destination.terminate();
+            ws.terminate();
+            return;
+        }
         destination.send(data);
     });
     ws.on('close', function () {
