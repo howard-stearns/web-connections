@@ -11,8 +11,8 @@ class RTCSignallingPeer {
         peer.onnegotiationneeded = _ => this.negotiationneeded();
         peer.onicecandidate = event => event.candidate && this.p2pSend('icecandidate', event.candidate)
         
-        peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
-        peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
+        //peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
+        //peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
         //peer.oniceconnectionstatechange = _ => console.log(this.id, 'ice connection state', peer.iceConnectionState);
         //peer.onicegatheringstatechange = _ => console.log(this.id, 'ice gathering state', peer.iceGatheringState);
     }
@@ -133,12 +133,6 @@ The server provides two endpoints:
   /message?type=W&to=X&from=Y&data=Z - Server routes the data to X's event source.
 */
 
-function debug(...args) {
-    console.error(...args);
-    setTimeout(_ => alert([...args].map(x => (typeof x === 'object') ? JSON.stringify(x) : x).join(' ')), 0);
-}
-
-const history = {};
 // Takes a f(...args) => promise into a f(..args) that does so one a time.
 function serializePromises(make1Promise) {
     let last = Promise.resolve();
@@ -150,43 +144,24 @@ function serializePromises(make1Promise) {
 class EventSourceRTC extends RTCSignallingPeer {
     constructor(eventSource, ourId, peerId, iceServers = null, constraints = null) {
         super(ourId, peerId, iceServers, constraints);
-        history[peerId] = []; this.lastId = 0, this.sendingId = 0;
         this.events.forEach(type => eventSource.addEventListener(type, this.forwarder.bind(this)));
+        // Ensure that this peer's outgoing signalling messages are done in serial.
+        // Multiple peers in the same browser can overlap in parallel.
+        this.poster = serializePromises(body => fetch('/message', {
+            method: 'post',
+            headers: {'Content-Type': 'application/json'},
+            body: body
+        }));
     }
     forwarder(messageEvent) {
         const message = JSON.parse(messageEvent.data);
         if (message.from !== this.peerId) return;
-        console.log(messageEvent);
-        const sent = history[this.id].shift();
-        if (parseInt(messageEvent.lastEventId, 10) !== this.lastId)
-            debug(`out of order id ${messageEvent.lastEventId} expected ${this.lastId}\n${sent}\n${messageEvent.data}`);
-        this.lastId++;
-        if (sent !== messageEvent.data) {
-            debug(`mismatch id:${messageEvent.lastEventId}\n${sent}\n${messageEvent.data}`);
-        } else {
-            console.log(`  ok: ${sent.slice(0, 80)}...`);
-        }
         this[messageEvent.type](message.data);
     }
     p2pSend(type, message) {
         const body = JSON.stringify({type, from: this.id, to: this.peerId, data: message});
-        history[this.peerId].push(body);
-        const sendingId = this.sendingId++;
-        return EventSourceRTC.poster(body)
-            .then(response => response.json())
-            .then(result => {
-                if (result.id !== sendingId) {
-                    debug(`Offered as ${sendingId} but became ${result.id}: ${JSON.stringify(message).slice(0, 100)}...`);
-                }
-            });
+        return this.poster(body);
     }
 }
-function post1(body) {
-    return fetch('/message', {
-        method: 'post',
-        headers: {'Content-Type': 'application/json'},
-        body: body
-    });
-}
-EventSourceRTC.poster = serializePromises(post1);
+
                                           

@@ -7,6 +7,10 @@ function uuidv4() { // Not crypto strong, but good enough for prototype.
         return v.toString(16);
     });
 }
+function debug(...args) {
+    console.error(...args);
+    setTimeout(_ => alert([...args].map(x => (typeof x === 'object') ? JSON.stringify(x) : x).join(' ')), 0);
+}
 
 describe('browser side', function () {
     const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
@@ -275,7 +279,8 @@ describe('browser side', function () {
                         connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
                         function checkConnected() {
                             if ((connection1.peer.connectionState === 'connected')
-                                && (connection2.peer.connectionState === 'connected'))
+                                && (connection2.peer.connectionState === 'connected')
+                                && !trackCount)
                                 done();
                         }
                         connection1.peer.onconnectionstatechange = checkConnected;
