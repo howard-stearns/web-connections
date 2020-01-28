@@ -142,15 +142,13 @@ class EventSourceRTC extends RTCSignallingPeer {
     forwarder(messageEvent) {
         const message = JSON.parse(messageEvent.data);
         if (message.from !== this.peerId) return;
-        const messageData = JSON.parse(message.data);
-        this[messageEvent.type](messageData);
+        this[messageEvent.type](message.data);
     }
     p2pSend(type, message) {
-        const data = JSON.stringify(message);
         fetch('/message', {
             method: 'post',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({type, from: this.id, to: this.peerId, data})
+            body: JSON.stringify({type, from: this.id, to: this.peerId, data: message})
         });
     }
 }

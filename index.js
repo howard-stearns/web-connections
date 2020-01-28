@@ -9,7 +9,12 @@ process.title = "p2p-load-test";
 const app = express();
 const expressWs = require('express-ws')(app);
 app.use(express.static('public'));
-app.use(bodyParser.json());
+function rawBodySaver(req, res, buf, encoding) {
+  if (buf && buf.length) {
+    req.rawBody = buf.toString(encoding || 'utf8');
+  }
+}
+app.use(bodyParser.json({verify: rawBodySaver}));
 app.use(bodyParser.urlencoded({extended: true}));
 
 /*
@@ -41,7 +46,7 @@ const registrants = {};
 function sendSSE(res, data, type = '') {
     // TODO: In production, we'll want send and keep track of message ids so that a reconnecting client can resync.
     if (type) res.write(`event: ${type}\n`);
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    res.write(`data: ${data}\n\n`);
     res.flushHeaders();
 }
 function heartbeatSSE(res, comment = '') {
@@ -53,8 +58,7 @@ app.post('/message', function (req, res) {
     if (!clientPipe) return res.status(404).send("Not found");
     // Alas, the EventSource standard does not provide a 'scope' field with which the client
     // can direct the data to the right client-side target, so we have to embed that in data.
-    const message = {from: req.body.from, data: req.body.data};
-    sendSSE(clientPipe, message, req.body.type);
+    sendSSE(clientPipe, req.rawBody, req.body.type);
     res.end(); // TODO: When we do message ids, it would be nice to return that.
 });
 
