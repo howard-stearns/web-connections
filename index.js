@@ -45,9 +45,12 @@ III. In between, we multiplex at the server. Messages from any client to you app
 const registrants = {};
 function sendSSE(res, data, type = '') {
     // TODO: In production, we'll want send and keep track of message ids so that a reconnecting client can resync.
-    if (type) res.write(`event: ${type}\n`);
-    res.write(`data: ${data}\n\n`);
+    if (type) res.write(`event: ${type}\n`); // Must be first if present
+    const messageId = res.sseMessageId++;
+    res.write(`data: ${data}\n`);
+    res.write(`id: ${messageId}\n\n`); // Conventionally last, so that count isn't incremented until data is sent.
     res.flushHeaders();
+    return messageId;
 }
 function heartbeatSSE(res, comment = '') {
     res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
@@ -58,8 +61,9 @@ app.post('/message', function (req, res) {
     if (!clientPipe) return res.status(404).send("Not found");
     // Alas, the EventSource standard does not provide a 'scope' field with which the client
     // can direct the data to the right client-side target, so we have to embed that in data.
-    sendSSE(clientPipe, req.rawBody, req.body.type);
-    res.end(); // TODO: When we do message ids, it would be nice to return that.
+    console.log(new Date(), `sse message ${clientPipe.sseMessageId} ${JSON.stringify(req.body.data).slice(0, 100)}...`);
+    const messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
+    res.end(JSON.stringify({id: messageId}));
 });
 
 app.get('/messages', function (req, res) {
@@ -75,6 +79,7 @@ app.get('/messages', function (req, res) {
     res.writeHead(200, headers);
     res.setTimeout(0); // Or we could heartbeat before the default 2 minutes.
     registrants[id] = res;
+    res.sseMessageId = 0;
 
     req.on('close', () => {
         console.log(new Date(), 'SSE connection closed', id);
@@ -100,7 +105,7 @@ app.ws('/:id', function (ws, req) {
             console.log(new Date(), 'WebSocket wrong origin', id, 'claimed', message.from);
             return ws.terminate();
         }
-        console.log(new Date(), 'message', message.type || 'data', (destination ? 'ok' : 'missing'));
+        console.log(new Date(), 'ws message', message.type || 'data', (destination ? 'ok' : 'missing'));
         if (!destination) return ws.terminate(); // Just close the connection, just as if client were directly connected to the destination.
         if (destination.readyState !== ws.OPEN) {
             destination.terminate();

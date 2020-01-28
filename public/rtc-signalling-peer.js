@@ -133,22 +133,41 @@ The server provides two endpoints:
   /message?type=W&to=X&from=Y&data=Z - Server routes the data to X's event source.
 */
 
+const history = {};
 class EventSourceRTC extends RTCSignallingPeer {
     constructor(eventSource, ourId, peerId, iceServers = null, constraints = null) {
         super(ourId, peerId, iceServers, constraints);
-        history[peerId] = [];
+        history[peerId] = []; this.lastId = 0, this.sendingId = 0;
         this.events.forEach(type => eventSource.addEventListener(type, this.forwarder.bind(this)));
     }
     forwarder(messageEvent) {
         const message = JSON.parse(messageEvent.data);
         if (message.from !== this.peerId) return;
+        console.log(messageEvent);
+        const sent = history[this.id].shift();
+        if (parseInt(messageEvent.lastEventId, 10) !== this.lastId) console.error(`out of order id ${messageEvent.lastEventId} expected ${this.lastId}\n${sent}\n${messageEvent.data}`);
+        this.lastId++;
+        if (sent !== messageEvent.data) {
+            console.error(`mismatch id:${messageEvent.lastEventId}\n${sent}\n${messageEvent.data}`);
+        } else {
+            console.log(`  ok: ${sent.slice(0, 80)}...`);
+        }
         this[messageEvent.type](message.data);
     }
     p2pSend(type, message) {
+        const body = JSON.stringify({type, from: this.id, to: this.peerId, data: message});
+        history[this.peerId].push(body);
+        const sendingId = this.sendingId++;
         fetch('/message', {
             method: 'post',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({type, from: this.id, to: this.peerId, data: message})
-        });
+            body: body
+        })
+            .then(response => response.json())
+            .then(result => {
+                if (result.id !== sendingId) {
+                    console.error(`Offered as ${sendingId} but became ${result.id}: ${JSON.stringify(message).slice(0, 100)}...`);
+                }
+            });
     }
 }
