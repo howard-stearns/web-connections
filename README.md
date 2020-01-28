@@ -28,7 +28,7 @@ The test suite at /SpecRunner.html checks eight things:
 3. Can an RTC dataChannel be established from this browser to another peer in the same browser, using direct loopback signalling?
 4. Can an RTC dataChannel be established from this browser to another peer in the same browser, using WebSockets for signalling?
 5. Can an RTC dataChannel be established from this browser to another peer in the same browser, using EventSource (SSE) for signalling?
-6. - 8. Same three questions for RTC media streams.
+6. 7, and 8. Same three questions for RTC media streams.
 
 So far:
 
