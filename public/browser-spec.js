@@ -12,6 +12,13 @@ function debug(...args) {
     setTimeout(_ => alert([...args].map(x => (typeof x === 'object') ? JSON.stringify(x) : x).join(' ')), 0);
 }
 
+const CONFIGURATION = {
+    iceServers: [
+        {urls: 'stun:ice.highfidelity.com'},
+    ]
+};
+
+
 describe('browser side', function () {
     const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
     const wsSite = protocol + "//" + location.host;
@@ -184,8 +191,8 @@ describe('browser side', function () {
             function run(done) {
                 const setupLabel = peerClass.name + ' data channel open';
                 const pingLabel = peerClass.name + ' data ping roundtrip';
-                connection1 = new peerClass(pipe1, id1, id2);
-                connection2 = new peerClass(pipe2, id2, id1);
+                connection1 = new peerClass(pipe1, id1, id2, CONFIGURATION);
+                connection2 = new peerClass(pipe2, id2, id1, CONFIGURATION);
                 connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
                 connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
                 connection2.peer.ondatachannel = event => {
@@ -261,8 +268,8 @@ describe('browser side', function () {
                         const setupLabel = peerClass.name + ' media channel open';
                         const tracks = {};
                         var trackCount = 2;
-                        connection1 = new peerClass(pipe1, id1, id2);
-                        connection2 = new peerClass(pipe2, id2, id1);
+                        connection1 = new peerClass(pipe1, id1, id2, CONFIGURATION);
+                        connection2 = new peerClass(pipe2, id2, id1, CONFIGURATION);
                         connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
                         connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
                         function checkConnected() {

@@ -3,13 +3,13 @@
 // Base class for signalling and resignalling of RTCPeerConnection.
 // Subclasses (below) are specialized for different kinds of signalling message carriers, and illustrate what must be provided.
 class RTCSignallingPeer {
-    constructor(ourId, peerId, iceServers = null, peerConstraints = null) {
+    constructor(ourId, peerId, configuration = null) {
         this.id = ourId;
         this.peerId = peerId;
-        const peer = this.peer = new RTCPeerConnection(iceServers, peerConstraints);
+        const peer = this.peer = new RTCPeerConnection(configuration);
         this.events = ['icecandidate', 'offer', 'answer'];
         peer.onnegotiationneeded = _ => this.negotiationneeded();
-        peer.onicecandidate = event => event.candidate && this.p2pSend('icecandidate', event.candidate)
+        peer.onicecandidate = event => event.candidate && this.p2pSend('icecandidate', event.candidate);
         
         //peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
         //peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
@@ -50,8 +50,8 @@ class RTCSignallingPeer {
 */
 const loopbackPeers = {};
 class LoopbackRTC extends RTCSignallingPeer {
-    constructor(eventSource, ourId, peerId, iceServers = null, constraints = null) {
-        super(ourId, peerId, iceServers, constraints);
+    constructor(eventSource, ourId, peerId, configuration = null) {
+        super(ourId, peerId, configuration);
         loopbackPeers[ourId] = this;
     }
     p2pSend(type, message) {
@@ -102,8 +102,8 @@ ws.onopen = _ => { const connection = new WebSocketRTC(ws, ourId, peerId); .....
 */
 
 class WebSocketRTC extends RTCSignallingPeer {
-    constructor(webSocket, ourId, peerId, iceServers = null, peerConstraints = null) {
-        super(ourId, peerId, iceServers, peerConstraints);
+    constructor(webSocket, ourId, peerId, configuration = null) {
+        super(ourId, peerId, configuration);
         this.webSocket = webSocket;
         // Each WebSocketRTC adds it's own listener to the shared webSocket, each of which ignores messages
         // that are not for it. (Yes, each one is parsing the message, but by using WebSockets, the
@@ -142,8 +142,8 @@ function serializePromises(make1Promise) {
     }
 }
 class EventSourceRTC extends RTCSignallingPeer {
-    constructor(eventSource, ourId, peerId, iceServers = null, constraints = null) {
-        super(ourId, peerId, iceServers, constraints);
+    constructor(eventSource, ourId, peerId, configuration = null) {
+        super(ourId, peerId, configuration);
         this.events.forEach(type => eventSource.addEventListener(type, this.forwarder.bind(this)));
         // Ensure that this peer's outgoing signalling messages are done in serial.
         // Multiple peers in the same browser can overlap in parallel.
