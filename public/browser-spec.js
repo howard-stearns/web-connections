@@ -174,8 +174,11 @@ describe('browser side', function () {
         var pipe1, pipe2;
         const id1 = uuidv4('data-1-');
         const id2 = uuidv4('data-2-');
-        afterEach(function () {
-            [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
+        afterEach(function (done) {
+            setTimeout(_ => {
+                [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
+                done();
+            }, 500);
         });
         function testDataStreams(thunks, peerClass, done) {
             function run(done) {
@@ -239,8 +242,11 @@ describe('browser side', function () {
         var pipe1, pipe2;
         const id1 = uuidv4('media-1');
         const id2 = uuidv4('media-2');
-        afterEach(function () {
-            [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
+        afterEach(function (done) {
+            setTimeout(_ => {
+                [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
+                done();
+            }, 500);
         });
         function testMediaStreams(thunks, peerClass, done) {
             function run(done) {
