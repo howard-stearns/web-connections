@@ -43,7 +43,7 @@ describe('browser side', function () {
                 method: 'post',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(body)
-            }).then(response => expect(response.status).toBe(200));
+            });
         }
         it('loops back messages', function (done) {
             const payload = 'payload1';
