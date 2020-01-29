@@ -1,8 +1,8 @@
 /*global describe, it, require*/
 "use strict";
 
-function uuidv4() { // Not crypto strong, but good enough for prototype.
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+function uuidv4(label = '') { // Not crypto strong, but good enough for prototype.
+    return label + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
@@ -19,14 +19,18 @@ describe('browser side', function () {
         setTimeout(_ => done(), 1000);
     });
     describe('event source', function () {        
-        var eventSource, eventHandler;
-        var target = uuidv4(), source = uuidv4(), type = 'foo';        
+        var eventSource, eventHandler, secondSource;
+        var target = uuidv4('sse-target-'), source = uuidv4('sse-source-'), type = 'foo';        
         beforeAll(function (done) { // Wait for open before starting tests.
             eventSource = new EventSource(`/messages?id=${target}`);
             eventSource.onopen = done;
         });
         afterEach(function () {
             eventSource.onmessage = null;
+        });
+        afterAll(function () {
+            eventSource.close();
+            secondSource.close();
         });
         function sendMessage(payload, type = '', to = target, from = source) {
             const body = {
@@ -65,18 +69,20 @@ describe('browser side', function () {
             }, {once: true});
             sendMessage(payload, type);
         });
-        it('delivers in order', async function (done) {
-            var payloads = ['a', 'b', 'c', 'd', 'e', 'f'], received = 0;
+        it('delivers in order', function (done) {
+            var payloads = ['a', 'b', 'c', 'd', 'e', 'f'],
+                received = 0,
+                serialSend = serializePromises(sendMessage);
             eventSource.onmessage = event => {
                 const message = JSON.parse(event.data);
                 expect(message.data).toBe(payloads[received++]);
                 if (received >= payloads.length) done();
             };
-            for (const p of payloads) await sendMessage(p);
+            payloads.forEach(p => serialSend(p));
         });
         it('distinguishes by id', function (done) {
-            const secondId = uuidv4();
-            const second = new EventSource(`/messages?id=${secondId}`);
+            const secondId = uuidv4('sse-second-');
+            const second = secondSource = new EventSource(`/messages?id=${secondId}`);
             second.onopen = _ => {
                 Promise.all([
                     new Promise(resolve => {
@@ -98,7 +104,7 @@ describe('browser side', function () {
         });
     });
     describe('web socket', function () {
-        var wsA, wsB, a = uuidv4(), b = uuidv4();
+        var wsA, wsB, a = uuidv4('wsA-'), b = uuidv4('wsB-');
         beforeAll(function (done) { // Wait for open before starting tests.
             wsA = new WebSocket(`${wsSite}/${a}`);
             wsA.onopen = _ => {
@@ -108,6 +114,10 @@ describe('browser side', function () {
         });
         afterEach(function () {
             wsA.onmessage = wsB.onmessage = null;
+        });
+        afterAll(function () {
+            wsA.close();
+            wsB.close();
         });
         function sendMessage(payload, to, from, type = '') {
             const data = {from: from, to: to, data: payload};
@@ -124,14 +134,14 @@ describe('browser side', function () {
             };
             sendMessage(payload, b, a);
         });
-        it('delivers in order', async function (done) {
+        it('delivers in order', function (done) {
             var payloads = ['a', 'b', 'c', 'd', 'e', 'f'], received = 0;
             wsB.onmessage = event => {
                 const message = JSON.parse(event.data);
                 expect(message.data).toBe(payloads[received++]);
                 if (received >= payloads.length) done();
             };
-            for (const p of payloads) await sendMessage(p, b, a);
+            payloads.forEach(p => sendMessage(p, b, a));
         });
         it('distinguishes by id', function (done) {
             Promise.all([
@@ -162,8 +172,8 @@ describe('browser side', function () {
     describe('data stream signalling', function () {
         var connection1, connection2;
         var pipe1, pipe2;
-        const id1 = uuidv4();
-        const id2 = uuidv4();
+        const id1 = uuidv4('data-1-');
+        const id2 = uuidv4('data-2-');
         afterEach(function () {
             if (pipe1) {
                 pipe1.close();
@@ -240,8 +250,8 @@ describe('browser side', function () {
     describe('media stream signalling', function () {
         var connection1, connection2;
         var pipe1, pipe2;
-        const id1 = uuidv4();
-        const id2 = uuidv4();
+        const id1 = uuidv4('media-1');
+        const id2 = uuidv4('media-2');
         afterEach(function () {
             if (pipe1) {
                 pipe1.close();
@@ -278,8 +288,9 @@ describe('browser side', function () {
                         connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
                         connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
                         function checkConnected() {
-                            if ((connection1.peer.connectionState === 'connected')
-                                && (connection2.peer.connectionState === 'connected')
+                            // Some browsers (firefox) don't define connectionState nor fire connectionstatechange.
+                            if (['connected', undefined].includes(connection1.peer.connectionState)
+                                && ['connected', undefined].includes(connection2.peer.connectionState)
                                 && !trackCount)
                                 done();
                         }
@@ -292,6 +303,7 @@ describe('browser side', function () {
                             expect(trackId).toBe(tracks[track.kind]);
                             if (--trackCount <= 0) {
                                 console.timeEnd(setupLabel);
+                                checkConnected();
                             }
                         });
 
@@ -322,6 +334,5 @@ describe('browser side', function () {
         it('event stream', testDataStreams([_ => new EventSource(`/messages?id=${id1}`),
                                             _ => new EventSource(`/messages?id=${id2}`)],
                                            EventSourceRTC));
-
     });
 });
