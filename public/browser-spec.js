@@ -22,7 +22,7 @@ describe('browser side', function () {
         var eventSource, eventHandler, secondSource;
         var target = uuidv4('sse-target-'), source = uuidv4('sse-source-'), type = 'foo';        
         beforeAll(function (done) { // Wait for open before starting tests.
-            eventSource = new EventSource(`/messages?id=${target}`);
+            eventSource = new EventSource(`/messages/${target}`);
             eventSource.onopen = done;
         });
         afterEach(function () {
@@ -82,7 +82,7 @@ describe('browser side', function () {
         });
         it('distinguishes by id', function (done) {
             const secondId = uuidv4('sse-second-');
-            const second = secondSource = new EventSource(`/messages?id=${secondId}`);
+            const second = secondSource = new EventSource(`/messages/${secondId}`);
             second.onopen = _ => {
                 Promise.all([
                     new Promise(resolve => {
@@ -175,27 +175,12 @@ describe('browser side', function () {
         const id1 = uuidv4('data-1-');
         const id2 = uuidv4('data-2-');
         afterEach(function () {
-            if (pipe1) {
-                pipe1.close();
-                pipe1 = null;
-            }
-            if (pipe2) {
-                pipe2.close();
-                pipe2 = null;
-            }
-            if (connection1) {
-                connection1.peer.close();
-                connection1 = null;
-            }
-            if (connection2) {
-                connection2.peer.close();
-                connection2 = null;
-            }
+            [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
         });
         function testDataStreams(thunks, peerClass, done) {
             function run(done) {
-                const setupLabel = peerClass.name + ' channel open';
-                const pingLabel = peerClass.name + ' ping roundtrip';
+                const setupLabel = peerClass.name + ' data channel open';
+                const pingLabel = peerClass.name + ' data ping roundtrip';
                 connection1 = new peerClass(pipe1, id1, id2);
                 connection2 = new peerClass(pipe2, id2, id1);
                 connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
@@ -222,11 +207,13 @@ describe('browser side', function () {
                     console.timeEnd(pingLabel);
                     console.log('channel1 got', event.data);
                     expect(event.data).toBe('pong');
+                    console.log(peerClass.name, 'data finished');
                     done();
                 };
                 channel1.onerror = e => debug('fixme channel1 error', e);
             }
             return function (done) {
+                console.log('start data', peerClass.name);
                 if (thunks) {
                     pipe1 = thunks[0]();
                     pipe1.onopen = _ => {
@@ -242,8 +229,8 @@ describe('browser side', function () {
         it('web socket', testDataStreams([_ => new WebSocket(`${wsSite}/${id1}`),
                                           _ => new WebSocket(`${wsSite}/${id2}`)],
                                          WebSocketRTC));
-        it('event stream', testDataStreams([_ => new EventSource(`/messages?id=${id1}`),
-                                            _ => new EventSource(`/messages?id=${id2}`)],
+        it('event stream', testDataStreams([_ => new EventSource(`/messages/${id1}`),
+                                            _ => new EventSource(`/messages/${id2}`)],
                                            EventSourceRTC));
 
     });
@@ -253,24 +240,9 @@ describe('browser side', function () {
         const id1 = uuidv4('media-1');
         const id2 = uuidv4('media-2');
         afterEach(function () {
-            if (pipe1) {
-                pipe1.close();
-                pipe1 = null;
-            }
-            if (pipe2) {
-                pipe2.close();
-                pipe2 = null;
-            }
-            if (connection1) {
-                connection1.peer.close();
-                connection1 = null;
-            }
-            if (connection2) {
-                connection2.peer.close();
-                connection2 = null;
-            }
+            [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
         });
-        function testDataStreams(thunks, peerClass, done) {
+        function testMediaStreams(thunks, peerClass, done) {
             function run(done) {
                 if (!(('mediaDevices' in navigator) &&
                       ('getUserMedia' in navigator.mediaDevices))) {
@@ -280,7 +252,7 @@ describe('browser side', function () {
                     .getUserMedia({video: true, audio: true})
                     .then(stream => {
                         if (!stream) return fail('No media stream');
-                        const setupLabel = peerClass.name + ' channel open';                        
+                        const setupLabel = peerClass.name + ' media channel open';
                         const tracks = {};
                         var trackCount = 2;
                         connection1 = new peerClass(pipe1, id1, id2);
@@ -291,8 +263,10 @@ describe('browser side', function () {
                             // Some browsers (firefox) don't define connectionState nor fire connectionstatechange.
                             if (['connected', undefined].includes(connection1.peer.connectionState)
                                 && ['connected', undefined].includes(connection2.peer.connectionState)
-                                && !trackCount)
+                                && !trackCount) {
+                                console.log(peerClass.name, 'media finished');
                                 done();
+                            }
                         }
                         connection1.peer.onconnectionstatechange = checkConnected;
                         connection2.peer.onconnectionstatechange = checkConnected;
@@ -316,6 +290,7 @@ describe('browser side', function () {
                           error => { debug(error); done();});
             }
             return function (done) {
+                console.log('start media', peerClass.name);
                 if (thunks) {
                     pipe1 = thunks[0]();
                     pipe1.onopen = _ => {
@@ -327,12 +302,12 @@ describe('browser side', function () {
                 }
             };
         }
-        it('loopback', testDataStreams(null, LoopbackRTC));
-        it('web socket', testDataStreams([_ => new WebSocket(`${wsSite}/${id1}`),
-                                          _ => new WebSocket(`${wsSite}/${id2}`)],
-                                         WebSocketRTC));
-        it('event stream', testDataStreams([_ => new EventSource(`/messages?id=${id1}`),
-                                            _ => new EventSource(`/messages?id=${id2}`)],
-                                           EventSourceRTC));
+        it('loopback', testMediaStreams(null, LoopbackRTC));
+        it('web socket', testMediaStreams([_ => new WebSocket(`${wsSite}/${id1}`),
+                                           _ => new WebSocket(`${wsSite}/${id2}`)],
+                                          WebSocketRTC));
+        it('event stream', testMediaStreams([_ => new EventSource(`/messages/${id1}`),
+                                             _ => new EventSource(`/messages/${id2}`)],
+                                            EventSourceRTC));
     });
 });

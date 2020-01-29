@@ -123,11 +123,11 @@ class WebSocketRTC extends RTCSignallingPeer {
 Signalling with ordinary GET to send messages, and Server-Side Events to receive them.  
 
 Use of this class in the browser is similar to above:
-const ourId = 'A', peerId = 'B', sse = new EventSource(`/messages?id=${ourId}`);
+const ourId = 'A', peerId = 'B', sse = new EventSource(`/messages/${ourId}`);
 ws.onopen = _ => { const connection = new EventSourceRTC(ws, ourId, peerId); ..... }
 
 The server provides two endpoints:
-  /messages?id=X - Pushes responses providing typed messageEvents on the EventSource. 
+  /messages/X - Pushes responses providing typed messageEvents on the EventSource. 
                    The forwarder below attaches to the signalling events and checks that they
                    are from our peer.
   /message?type=W&to=X&from=Y&data=Z - Server routes the data to X's event source.

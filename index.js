@@ -20,23 +20,11 @@ app.use(bodyParser.urlencoded({extended: true}));
 /*
 P2P Message Proxy
 Every client connects with an id and can send typed events to any other id, through here.
-The "obvious" way to do that is with WebSockets, e.g., client opens a new WebSocket for each
-client it wants to send messages to, but that's not scalable for several reasons.
-1. Browsers limit how many WebSockets can be opened, to about 200. We conceptually need a lot more,
-   even for our initial tests. We could multiplex over a single socket, then the implementation ends
-   up looking a lot like what's done below.
-2. The Internet says that servers run into problems around 1000 open sockets per server instance,
-   so we'll need some http/s/2 reverse-proxy support, such as NGINX. But once established, WebSocket
-   is at the TCP level, and not handled by such proxies.
-3. Support for WebSockets over cellular is dicey (and for good battery/network reasons), so we're
-   likely to have to eventually use the Push API when it becomes supported, or carrier-specic pushes
-   until then. At that point, it looks a lot like what's done below.
-So...
-I. Clients open new EventSource('/messages?id=whatever'), which is kept open and delivers a stream of
+I. Clients open new EventSource('/messages/someId'), which is kept open and delivers a stream of
    event messages pushed by the server.
 II. Clients can post individual messages to /message, specifying a to/from ids, message, and optional type.
    The server then delivers it to the appropriate event source (I).
-   So, clients post to /message, and server pushes over the connection opened by the client hitting /messages.
+   So, clients post to /message, and server pushes over a connection opened by the client hitting /messages.
 III. In between, we multiplex at the server. Messages from any client to you appears only at your EventSource.
    A production environment will also need a message queue across server instances, which is not implemented
    in the following code, because we don't need it yet.
@@ -66,8 +54,8 @@ app.post('/message', function (req, res) {
     res.end(JSON.stringify({id: messageId}));
 });
 
-app.get('/messages', function (req, res) {
-    const id = req.query.id;
+app.get('/messages/:id', function (req, res) {
+    const id = req.params.id;
     // SSE headers and http status to keep connection open
     // TODO: heartbeat
     // TODO: reject requests that don't accept this content-type.
