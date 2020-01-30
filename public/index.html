@@ -5,6 +5,8 @@
   </head>
   <body>
     <h1>Test Your P2P Web Connections</h1>
+
+    <p>The following information will be recorded.</p>
     <p>Required capabilities:
       <input type="checkbox" id="promises", disabled>promises</input>
       <input type="checkbox" id="storage", disabled>local storage</input>
@@ -20,7 +22,7 @@
     </p>
     <table id="table" border="1">
       <tr>
-        <th colspan="3">general</th>
+        <th colspan="4">general</th>
         <th colspan="3">webSocket to server & back</th>
         <th colspan="3">SSE to server & back</th>
         <th colspan="3">RTC dataChannel to peer & back</th>
@@ -31,8 +33,9 @@
         <th colspan="5">inbound video</th>        
       </tr>
       <tr>        
-        <th>date</th>
-        <th>tz offset</th>
+        <th>date/time</th>
+        <th>timezone offset (minutes)</th>
+        <th>concurrency during test</th>
         <th>peer id</th>
 
         <th>setup (ms)</th>
@@ -77,6 +80,8 @@
         <th>roundTripTime</th>
       </tr>
     </table>
+    <p id="userMessages"></p>
+    <p><a href="SpecRunner.html">Unit tests (this machine only)</a></p>
     <script src="rtc-signalling-peer.js"></script>
     <script src="script.js"></script>
   </body>

@@ -30,7 +30,7 @@ function report(data) {
     console.log("Test " + guid + (FAILED ? " failed: " : " passed:\n"), data);
     window.result = data;
     const keys = [
-        "date","tzOffset", "peer",
+        "date","tzOffset", "concurrency", "peer",
         "wsSetup","wsPing","wsKbs",
         "sseSetup","ssePing","sseKbs",
         "dataSetup","dataPing","dataKbs",
@@ -44,9 +44,9 @@ function report(data) {
         const item = document.createElement('td');
         var value = data[key];
         if (value === undefined) {
-            value = '';
+            value = '    ';
         } else if (typeof value === 'number') {
-            if (value > 1) {
+            if (value >= 1) {
                 value = Math.round(value);
             } else if (value > 0) {
                 value = value.toFixed(3);
@@ -228,6 +228,7 @@ function test(label, channel, send, collector) {
 var existingPeers, stream, webSocket;
 new Promise(resolve => { // Ask for webcam
     if (!browserData.av) return resolve(false);
+    userMessages.innerHTML = "Allowing webcam and microphone helps us to gauge media transfer. It will not be displayed or recorded anywhere, and will be turned off at the conclusion of testing."
     setTimeout(_ => {
         console.log('webcam timer went off');
         browserData.unresponsiveToMedia = true;
@@ -238,6 +239,7 @@ new Promise(resolve => { // Ask for webcam
     .then(media => stream = media,
           error => console.error(error))
     .then(_ => {
+        userMessages.innerHTML = "Thank you for sharing your computer" + (stream ? " and webcam.": ".") + " Testing...";
         webSocket = new WebSocket(`${wsSite}/${guid}`);
         return test('ws',
                     webSocket,
@@ -252,6 +254,7 @@ new Promise(resolve => { // Ask for webcam
         // We will immediately be given a listing of currently connected peers. Save it for later
         eventSource.addEventListener('listing', messageEvent => {
             existingPeers = JSON.parse(messageEvent.data);
+            browserData.concurrency = existingPeers.length;
         });
         // We will now be reported to others, so respond if they start to connect to us.
         eventSource.addEventListener('offer', messageEvent => { // TBD: Could 'icecandidate' also come first sometimes?
@@ -277,5 +280,6 @@ new Promise(resolve => { // Ask for webcam
         stream.getTracks().forEach(track => track.stop());
         console.info('Completed %s tests.', results.length);
         if (!results.length) report(browserData);
+        userMessages.innerHTML = "Testing is complete. If you can, <b>please leave this page up</b> so that other people can test to you with higher concurrency. (No futher webcam or audio data will be used, however.)"
     });
 
