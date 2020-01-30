@@ -285,7 +285,9 @@ new Promise(resolve => { // Ask for webcam
         // We will immediately be given a listing of currently connected peers. Save it for later
         eventSource.addEventListener('listing', messageEvent => {
             const message = JSON.parse(messageEvent.data);
-            existingPeers = message.peers;
+            // Hitting refresh can sometimes allow our guid to still be registered.
+            // We need two different EventSource to test loopback, but then we'd be registered twice and things would get weird.
+            existingPeers = message.peers.filter(p => p !== guid);
             browserData.concurrency = existingPeers.length;
             browserData.ip = message.ip;
         });
