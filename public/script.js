@@ -43,7 +43,7 @@ function report(data) {
     console.info("Test " + guid + (FAILED ? " failed: " : " passed:\n"), data);
     window.result = data;
     const keys = [
-        "date","tzOffset", "concurrency", "peer",
+        "date","tzOffset", "ip", "concurrency", "peer",
         "wsSetup","wsPing","wsKbs",
         "sseSetup","ssePing","sseKbs",
         "dataSetup","dataPing","dataKbs",
@@ -284,8 +284,10 @@ new Promise(resolve => { // Ask for webcam
         eventSource = new EventSource(`/messages/${guid}`)
         // We will immediately be given a listing of currently connected peers. Save it for later
         eventSource.addEventListener('listing', messageEvent => {
-            existingPeers = JSON.parse(messageEvent.data);
+            const message = JSON.parse(messageEvent.data);
+            existingPeers = message.peers;
             browserData.concurrency = existingPeers.length;
+            browserData.ip = message.ip;
         });
         // We will now be reported to others, so respond if they start to connect to us.
         eventSource.addEventListener('offer', messageEvent => { // TBD: Could 'icecandidate' also come first sometimes?
