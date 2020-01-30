@@ -102,14 +102,14 @@ class CommonConnection extends EventSourceRTC { // Connection to whatever we are
             // Either end can close, by sending a message. We use the signalling channel because
             // there no completely supported way to tell if an RTCPeerConnection or RTCDataChannel
             // has been closed.
-            this.cleanup();
+            this.close();
         });
     }
     initDataChannel(channel) {
         this.channel = channel;
         channel.onerror = e => console.error(e); // Alas, not widely supported.
     }
-    cleanup() {
+    close() {
         const kill1 = (dictionary, label) => {
             const peerId = this.peerId;
             const connection = dictionary[peerId];
@@ -119,10 +119,10 @@ class CommonConnection extends EventSourceRTC { // Connection to whatever we are
                 return true;
             }
         }
+        super.close();
         if (kill1(testConnections, 'testing')) {
             report(this.results);
         } else { // We currently do not report our end of test.
-            this.close();
             kill1(respondingConnections, 'responding to');
         }
     }
@@ -191,17 +191,15 @@ class TestingConnection extends CommonConnection {
             .then(collector => stream && (collector.mediaRuntime = Date.now() - mediaStartTime))
             .then(_ => connection.peer.getStats())
             .then(stats => {
-                console.log('here');
                 stats.forEach(report => {
                     const kinds = mediaReportMap[report.type];
                     if (!kinds) return;
                     kinds[report.kind].forEach(key => connection.results[[report.type, report.kind, key].join('-')] = report[key]);
                 });
-                connection.close();
             })
             .catch(e => console.log('caught', e))
             .then(_ => connection.p2pSend('close', null))
-            .then(_ => connection.cleanup());
+            .then(_ => connection.close());
     }
     constructor(peerId) {
         super(peerId);
@@ -257,11 +255,11 @@ function test(label, channel, send, collector) {
     });
 }
 
-var existingPeers, stream, webSocket;
+var existingPeers, stream, webcamTimer, webSocket;
 new Promise(resolve => { // Ask for webcam
     if (!browserData.av) return resolve(false);
     userMessages.innerHTML = "Allowing webcam and microphone helps us to gauge media transfer. It will not be displayed or recorded anywhere, and will be turned off at the conclusion of testing."
-    setTimeout(_ => {
+    webcamTimer = setTimeout(_ => {
         console.log('webcam timer went off');
         browserData.unresponsiveToMedia = true;
         resolve(false);
@@ -271,6 +269,7 @@ new Promise(resolve => { // Ask for webcam
     .then(media => stream = media,
           error => console.error(error))
     .then(_ => {
+        clearTimeout(webcamTimer);
         userMessages.innerHTML = "Thank you for sharing your computer" + (stream ? " and webcam.": ".")
             + " Testing... It will be at least " + seconds + " seconds before results start showing above.";
         webSocket = new WebSocket(`${wsSite}/${guid}`);
