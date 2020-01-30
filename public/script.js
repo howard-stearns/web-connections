@@ -74,7 +74,7 @@ function report(data) {
 }
 Object.keys(browserData).forEach(function (key) {
     document.getElementById(key).checked = browserData[key];
-    if (!browserData[key]) FAILED = true;
+    if (!browserData[key] && (key != 'av')) FAILED = true;
 });
 ourId.innerHTML = browserData.id = guid; 
 agent.innerHTML = browserData.agent = navigator.userAgent;
@@ -82,7 +82,7 @@ agent.innerHTML = browserData.agent = navigator.userAgent;
 const now = new Date();
 browserData.date = now.toISOString();
 browserData.tzOffset = now.getTimezoneOffset();
-if (FAILED) report();
+if (FAILED) report(browserData);
 localStorage.setItem(ID_KEY, guid);
 
 // Testing:
