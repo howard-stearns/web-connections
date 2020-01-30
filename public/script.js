@@ -2,15 +2,17 @@
 
 // Basic info for reporting:
 var FAILED = false;
+var dummy = window.RTCPeerConnection && new window.RTCPeerConnection();
 var browserData = {
     promises: !!window.Promise,
     storage: !!window.localStorage,
     ws: !!window.WebSocket,
     sse: !!window.EventSource,
     rtc: !!window.RTCPeerConnection,
-    data: window.RTCPeerConnection && !!new window.RTCPeerConnection().createDataChannel,
+    data: dummy && !!dummy.createDataChannel,
     av: navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia
 }
+dummy = null;
 
 function uuidv4(label = '') { // Not crypto strong, but good enough for prototype.
     return label + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -132,7 +134,7 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
     constructor(message) {
         super(message.from);
         console.info('Starting response to', this.peerId);
-        this.peer.addEventListener('track', event => this.channel.send(event.track.kind));
+        this.peer.addEventListener('track', event => this.channel && this.channel.send(event.track.kind));
         this.peer.ondatachannel = event => {
             console.log('Got data channel for', this.peerId);
             const channel = event.channel;
@@ -151,7 +153,7 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
                 }
             };
         };
-        this[message.type](message.data);
+        this[message.type](message.data); // And now act on whatever triggered our creation (e.g., offer).
     }
 }
 
@@ -256,7 +258,8 @@ function test(label, channel, send, collector) {
 }
 
 var existingPeers, stream, webcamTimer, webSocket;
-new Promise(resolve => { // Ask for webcam
+new Promise((resolve, reject) => { // Ask for webcam
+    if (FAILED) reject("Missing required functionality.");
     if (!browserData.av) return resolve(false);
     userMessages.innerHTML = "Allowing webcam and microphone helps us to gauge media transfer. It will not be displayed or recorded anywhere, and will be turned off at the conclusion of testing."
     webcamTimer = setTimeout(_ => {
@@ -281,40 +284,48 @@ new Promise(resolve => { // Ask for webcam
     .then(result => {
         webSocket.close();
 
-        eventSource = new EventSource(`/messages/${guid}`)
+        eventSource = new EventSource(`/messages/${guid}`);
         // We will immediately be given a listing of currently connected peers. Save it for later
-        eventSource.addEventListener('listing', messageEvent => {
+        function listingHandler(messageEvent) {
             const message = JSON.parse(messageEvent.data);
+            console.log('listingHandler', message);
             // Hitting refresh can sometimes allow our guid to still be registered.
             // We need two different EventSource to test loopback, but then we'd be registered twice and things would get weird.
             existingPeers = message.peers.filter(p => p !== guid);
             browserData.concurrency = existingPeers.length;
             browserData.ip = message.ip;
-        });
+        }
+        eventSource.addEventListener('listing', listingHandler);
         // We will now be reported to others, so respond if they start to connect to us.
-        eventSource.addEventListener('offer', messageEvent => { // TBD: Could 'icecandidate' also come first sometimes?
+        function peerEventHandler(messageEvent) {
             const message = JSON.parse(messageEvent.data);
             // This could be a renegotiation of something that already has it's own connection.
             if (respondingConnections[message.from]) return;
             // Create a responder and let it act on the offer.
             respondingConnections[message.from] = new RespondingConnection(message);
+        }
+        eventSource.addEventListener('offer', peerEventHandler);
+        // Server will timeout the connection, but a reload produce confusing results unless we play nice.
+        window.addEventListener('beforeunload', event => {
+            eventSource.removeEventListener('listing', listingHandler);
+            eventSource.removeEventListener('offer', peerEventHandler);
+            eventSource.close()
         });
         return result;
     })
-    .then(result =>
-          test('sse',
-               eventSource,
-               data => fetch('/message', {
-                   method: 'post',
-                   headers: {'Content-Type': 'application/json'},
-                   body: JSON.stringify({to: guid, from: guid, data: data})
-               }),
-               result))
+    .then(result => test('sse',
+                         eventSource,
+                         data => fetch('/message', {
+                             method: 'post',
+                             headers: {'Content-Type': 'application/json'},
+                             body: JSON.stringify({to: guid, from: guid, data: data})
+                         }),
+                         result))
     .then(_ => Promise.all(existingPeers.map(TestingConnection.run)),
           _ => [])
     .then(results => {
         stream.getTracks().forEach(track => track.stop());
-        console.info('Completed %s tests.', results.length);
+        console.info('Completed %s peer tests.', results.length);
         if (!results.length) report(browserData);
         userMessages.innerHTML = "Testing is complete. If you can, <b>please leave this page up</b> so that other people can test to you with higher concurrency. (No futher webcam or audio data will be used, however.)"
     });
