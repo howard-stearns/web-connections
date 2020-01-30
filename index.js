@@ -66,7 +66,6 @@ app.get('/messages/:id', function (req, res) {
     };
     res.writeHead(200, headers);
     res.setTimeout(0); // Or we could heartbeat before the default 2 minutes.
-    registrants[id] = res;
     res.sseMessageId = 0;
 
     req.on('close', () => {
@@ -77,9 +76,9 @@ app.get('/messages/:id', function (req, res) {
     // In this application, we tell each new registrant about all existing ones.
     // TODO: decide whether to do this in production. Separate method?
     // Note that, for now, we do not broadcast new registrants to existing ones. No need.
-    //sendSSE(res, Object.keys(registrants)); // FIXME: don't do while trying to debug, and don't do after we add id to registrants
-    heartbeatSSE(res); // comment forces open event on other end
-    
+    sendSSE(res, JSON.stringify(Object.keys(registrants)), 'listing');
+    //heartbeatSSE(res); // comment forces open event on other end
+    registrants[id] = res;
 });
 
 const wsRegistrants = {};

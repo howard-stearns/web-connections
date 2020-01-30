@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en" >
+  <head>
+    <title>Web Connections Test</title>
+  </head>
+  <body>
+    <h1>Test Your P2P Web Connections</h1>
+    <p>Required capabilities:
+      <input type="checkbox" id="promises", disabled>promises</input>
+      <input type="checkbox" id="storage", disabled>local storage</input>
+      <input type="checkbox" id="ws", disabled>web sockets</input>
+      <input type="checkbox" id="sse", disabled>server-side events (SSE)</input>
+      <input type="checkbox" id="rtc", disabled>realtime communications (RTC)</input>
+      <input type="checkbox" id="data", disabled>rtc data</input>
+      <input type="checkbox" id="av", disabled>rtc audio/video</input>            
+    </p>
+    <p>
+      id: <span id="ourId"></span><br>
+      agent: <span id="agent"></span><br>
+    </p>
+    <table id="table" border="1">
+      <tr>
+        <th colspan="3">general</th>
+        <th colspan="3">webSocket to server & back</th>
+        <th colspan="3">SSE to server & back</th>
+        <th colspan="3">RTC dataChannel to peer & back</th>
+        <th colspan="2">RTC media</th>
+        <th colspan="3">outbound audio</th>
+        <th colspan="9">outbound video</th>        
+        <th colspan="5">inbound audio</th>
+        <th colspan="5">inbound video</th>        
+      </tr>
+      <tr>        
+        <th>date</th>
+        <th>tz offset</th>
+        <th>peer id</th>
+
+        <th>setup (ms)</th>
+        <th>ping (ms)</th>
+        <th>bandwidth (kbps)</th>
+
+        <th>setup (ms)</th>
+        <th>ping (ms)</th>
+        <th>bandwidth (kbps)</th>
+
+        <th>setup (ms)</th>
+        <th>ping (ms)</th>
+        <th>bandwidth (kbps)</th>
+
+        <th>test runtime (s)</th>
+        <th>setup (ms)</th>
+
+        <th>bytesSent</th>
+        <th>nackCount</th>
+        <th>packetsSent</th>
+
+        <th>bitrateMean</th>
+        <th>bitrateStdDev</th>
+        <th>bytesSent</th>
+        <th>droppedFrames</th>
+        <th>framerateMean</th>
+        <th>framerateStdDev</th>
+        <th>framesEncoded</th>
+        <th>nackCount</th>
+        <th>packetsSent</th>
+
+        <th>bytesReceived</th>
+        <th>jitter</th>
+        <th>packetsLost</th>
+        <th>packetsReceived</th>
+        <th>roundTripTime</th>
+
+        <th>bytesReceived</th>
+        <th>jitter</th>
+        <th>packetsLost</th>
+        <th>packetsReceived</th>
+        <th>roundTripTime</th>
+      </tr>
+    </table>
+    <script src="rtc-signalling-peer.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
