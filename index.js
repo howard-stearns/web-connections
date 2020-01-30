@@ -8,6 +8,7 @@ const bodyParser = require('body-parser');
 process.title = "p2p-load-test";
 const app = express();
 const expressWs = require('express-ws')(app);
+app.set('trust proxy', true);
 app.use(express.static('public'));
 function rawBodySaver(req, res, buf, encoding) {
   if (buf && buf.length) {
@@ -76,7 +77,7 @@ app.get('/messages/:id', function (req, res) {
     // In this application, we tell each new registrant about all existing ones.
     // TODO: decide whether to do this in production. Separate method?
     // Note that, for now, we do not broadcast new registrants to existing ones. No need.
-    sendSSE(res, JSON.stringify(Object.keys(registrants)), 'listing');
+    sendSSE(res, JSON.stringify({ip: req.ip, peers: Object.keys(registrants)}), 'listing');
     //heartbeatSSE(res); // comment forces open event on other end
     registrants[id] = res;
 });
