@@ -16,6 +16,12 @@ class RTCSignallingPeer {
         //peer.oniceconnectionstatechange = _ => console.log(this.id, 'ice connection state', peer.iceConnectionState);
         //peer.onicegatheringstatechange = _ => console.log(this.id, 'ice gathering state', peer.iceGatheringState);
     }
+    // Not all RTCPeerConnection implementations fire connectionstatechange or other indication of closure.
+    close() { // So use this to allow cleanup.
+        const peer = this.peer;
+        peer.onnegotiationneeded = peer.onicecandidate = null;
+        peer.close();
+    }
     icecandidate(iceCandidate) { // We have been signalled by the other end about a new candidate.
         this.peer.addIceCandidate(iceCandidate)
             .catch(e => setTimeout(_ => alert('CONNECTION ADD ICE FAILED', this.id, e.name, e.message), 0));
@@ -108,11 +114,16 @@ class WebSocketRTC extends RTCSignallingPeer {
         // Each WebSocketRTC adds it's own listener to the shared webSocket, each of which ignores messages
         // that are not for it. (Yes, each one is parsing the message, but by using WebSockets, the
         // the scalability ship has already sailed.)
-        webSocket.addEventListener('message', messageEvent => { // When is the handler gc'd?
+        this.messageListener = messageEvent => {
             const message = JSON.parse(messageEvent.data);
             if (message.from !== this.peerId) return;
             this[message.type](message.data);
-        });
+        };
+        webSocket.addEventListener('message', this.messageListener);
+    }
+    close() {
+        this.webSocket.removeEventListener('message', this.messageListener);
+        super.close();
     }
     p2pSend(type, message) { // Create json message with metadata and send it up the socket.
         this.webSocket.send(JSON.stringify({type: type, from: this.id, to: this.peerId, data: message}));
@@ -144,7 +155,8 @@ function serializePromises(make1Promise) {
 class EventSourceRTC extends RTCSignallingPeer {
     constructor(eventSource, ourId, peerId, configuration = null) {
         super(ourId, peerId, configuration);
-        this.events.forEach(type => eventSource.addEventListener(type, this.forwarder.bind(this)));
+        this.eventListener = this.forwarder.bind(this);
+        this.events.forEach(type => eventSource.addEventListener(type, this.eventListener));
         // Ensure that this peer's outgoing signalling messages are done in serial.
         // Multiple peers in the same browser can overlap in parallel.
         this.poster = serializePromises(body => fetch('/message', {
@@ -152,6 +164,13 @@ class EventSourceRTC extends RTCSignallingPeer {
             headers: {'Content-Type': 'application/json'},
             body: body
         }));
+    }
+    close() {
+        // Consider what happens when we create this to communicate with a given peerId,
+        // and close it, and then instantiate it again for the same peerId. We don't want
+        // the event listener to continue to send to the closed instance.
+        this.events.forEach(type => eventSource.removeEventListener(type, this.eventListener));
+        super.close();
     }
     forwarder(messageEvent) {
         const message = JSON.parse(messageEvent.data);

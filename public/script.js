@@ -26,15 +26,28 @@ var ID_KEY = 'guid';
 var guid = (window.localStorage && localStorage.getItem(ID_KEY)) || uuidv4();
 
 // Reporting:
+const FAIL_VALUE = 'FAIL';
+const seconds = 10;
+const mediaReportMap = {
+    'outbound-rtp': {
+        audio: ['bytesSent', 'nackCount', 'packetsSent'],
+        video: ['bitrateMean', 'bitrateStdDev', 'bytesSent', 'droppedFrames', 'framerateMean', 'framerateStdDev',
+                'framesEncoded', 'nackCount', 'packetsSent']
+    },
+    'remote-inbound-rtp': {
+        audio: ['bytesReceived', 'jitter', 'packetsLost', 'packetsReceived', 'roundTripTime'],
+        video: ['bytesReceived', 'jitter', 'packetsLost', 'packetsReceived', 'roundTripTime']
+    }
+};
 function report(data) {
-    console.log("Test " + guid + (FAILED ? " failed: " : " passed:\n"), data);
+    console.info("Test " + guid + (FAILED ? " failed: " : " passed:\n"), data);
     window.result = data;
     const keys = [
         "date","tzOffset", "concurrency", "peer",
         "wsSetup","wsPing","wsKbs",
         "sseSetup","ssePing","sseKbs",
         "dataSetup","dataPing","dataKbs",
-        "mediaSeconds","mediaSetup",
+        "nTracks", "mediaSetup", "mediaRuntime",
         "outbound-rtp-audio-bytesSent","outbound-rtp-audio-nackCount","outbound-rtp-audio-packetsSent",
         "outbound-rtp-video-bitrateMean","outbound-rtp-video-bitrateStdDev","outbound-rtp-video-bytesSent","outbound-rtp-video-droppedFrames","outbound-rtp-video-framerateMean","outbound-rtp-video-framerateStdDev","outbound-rtp-video-framesEncoded","outbound-rtp-video-nackCount","outbound-rtp-video-packetsSent",
         "remote-inbound-rtp-audio-bytesReceived","remote-inbound-rtp-audio-jitter","remote-inbound-rtp-audio-packetsLost","remote-inbound-rtp-audio-packetsReceived","remote-inbound-rtp-audio-roundTripTime",
@@ -45,6 +58,8 @@ function report(data) {
         var value = data[key];
         if (value === undefined) {
             value = '    ';
+        } else if (value === FAIL_VALUE) {
+            value = '<b>FAIL</b>';
         } else if (typeof value === 'number') {
             if (value >= 1) {
                 value = Math.round(value);
@@ -107,6 +122,7 @@ class CommonConnection extends EventSourceRTC { // Connection to whatever we are
         if (kill1(testConnections, 'testing')) {
             report(this.results);
         } else { // We currently do not report our end of test.
+            this.close();
             kill1(respondingConnections, 'responding to');
         }
     }
@@ -138,50 +154,53 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
         this[message.type](message.data);
     }
 }
+
 class TestingConnection extends CommonConnection {
     static run(peerId) {
         const connection = testConnections[peerId] = new TestingConnection(peerId);
-        const seconds = 10;
+        var mediaStartTime;
+        connection.results = Object.assign({peer: peerId}, browserData);
         return test('data', connection.channel,
                     data => connection.channel.send(data),
-                    Object.assign({peer: peerId}, browserData))
+                    connection.results)
             .then(collector => { // Now check video
-                connection.results = collector;
-                var start = Date.now();
-                return new Promise(resolve => {
-                    if (!stream) return resolve();
-                    const key = 'mediaSetup';
-                    collector.mediaSeconds = seconds;
-                    connection.channel.onmessage = message => {
-                        collector[key] = Date.now() - start;
-                        console.log(key, collector[key]);
-                        setTimeout(_ => resolve(), seconds * 1000); // Get 10 seconds of audio to collect stats on
+                const nTracksKey = 'nTracks';
+                collector[nTracksKey] = 0;
+                return new Promise((resolve, reject) => {
+                    var tracksReceived = 0;
+                    if (!stream) return resolve(collector);
+                    const setupKey = 'mediaSetup';
+                    connection.channel.onmessage = event => {
+                        if (!['audio', 'video'].includes(event.data)) {
+                            return console.error("Unexpected video message %s from %s", event.data, connection.peerId);
+                        }
+                        if (++tracksReceived < collector[nTracksKey]) return;
+                        collector[setupKey] = Date.now() - start;
+                        console.log(setupKey, collector[setupKey], 'track', tracksReceived, '/', collector[nTracksKey]);
+                        mediaStartTime = Date.now();
+                        setTimeout(_ => resolve(collector), seconds * 1000); // Get 10 seconds of audio to collect stats on
                     };
                     // Now start the video
-                    stream.getTracks().forEach(track => connection.peer.addTrack(track, stream));
+                    var start = startSubtest(5000, collector, setupKey, reject);
+                    stream.getTracks().forEach(track => {
+                        connection.peer.addTrack(track, stream);
+                        collector[nTracksKey]++;
+                    });
                 });
             })
+            .then(collector => stream && (collector.mediaRuntime = Date.now() - mediaStartTime))
             .then(_ => connection.peer.getStats())
             .then(stats => {
+                console.log('here');
                 stats.forEach(report => {
-                    console.log(report);
-                    const map = {
-                        'outbound-rtp': {
-                            audio: ['bytesSent', 'nackCount', 'packetsSent'],
-                            video: ['bitrateMean', 'bitrateStdDev', 'bytesSent', 'droppedFrames', 'framerateMean', 'framerateStdDev',
-                                    'framesEncoded', 'nackCount', 'packetsSent']
-                        },
-                        'remote-inbound-rtp': {
-                            audio: ['bytesReceived', 'jitter', 'packetsLost', 'packetsReceived', 'roundTripTime'],
-                            video: ['bytesReceived', 'jitter', 'packetsLost', 'packetsReceived', 'roundTripTime']
-                        }
-                    };
-                    const kinds = map[report.type];
+                    const kinds = mediaReportMap[report.type];
                     if (!kinds) return;
                     kinds[report.kind].forEach(key => connection.results[[report.type, report.kind, key].join('-')] = report[key]);
                 });
-                return connection.p2pSend('close', null);
+                connection.close();
             })
+            .catch(e => console.log('caught', e))
+            .then(_ => connection.p2pSend('close', null))
             .then(_ => connection.cleanup());
     }
     constructor(peerId) {
@@ -190,14 +209,26 @@ class TestingConnection extends CommonConnection {
     }
 }
 
+// Answer Date.now(), but also start a timer that will reject the test if
+// the specified collector[key] has not been set before the timer goes off.
+function startSubtest(milliseconds, collector, key, reject) {
+    setTimeout(_ => {
+        if (collector[key] === undefined) {
+            console.error("%s did not complete in %s ms.", key, milliseconds);
+            collector[key] = FAIL_VALUE;
+            reject(key + " timeout");
+        }
+    }, milliseconds);
+    return Date.now();
+}
+
 // Returns a promise resolving to collector with results of setup, ping and bandwidth noted.
 // We're relying on each "channel" having and onopen and onmessage.
 function test(label, channel, send, collector) {
     const setupKey = label + 'Setup';
     const pingKey = label + 'Ping';
     const bandwidthKey = label + 'Kbs';
-    var start = Date.now();
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
         channel.onopen = _ => {
             // We're now setup.
             collector[setupKey] = Date.now() - start;
@@ -215,13 +246,14 @@ function test(label, channel, send, collector) {
                     resolve(collector);
                 };
                 // Send a data block and expect a message back.
-                start = Date.now();
+                start = startSubtest(5000, collector, bandwidthKey, reject);
                 send('data' + block);
             };
             // Send ping and expect a message back.
-            start = Date.now();
+            start = startSubtest(5000, collector, pingKey, reject);
             send('ping');
         }
+        var start = startSubtest(5000, collector, setupKey, reject);
     });
 }
 
@@ -239,7 +271,8 @@ new Promise(resolve => { // Ask for webcam
     .then(media => stream = media,
           error => console.error(error))
     .then(_ => {
-        userMessages.innerHTML = "Thank you for sharing your computer" + (stream ? " and webcam.": ".") + " Testing...";
+        userMessages.innerHTML = "Thank you for sharing your computer" + (stream ? " and webcam.": ".")
+            + " Testing... It will be at least " + seconds + " seconds before results start showing above.";
         webSocket = new WebSocket(`${wsSite}/${guid}`);
         return test('ws',
                     webSocket,
@@ -247,7 +280,6 @@ new Promise(resolve => { // Ask for webcam
                     browserData);
     })
     .then(result => {
-        console.log(result);
         webSocket.close();
 
         eventSource = new EventSource(`/messages/${guid}`)
@@ -275,7 +307,8 @@ new Promise(resolve => { // Ask for webcam
                    body: JSON.stringify({to: guid, from: guid, data: data})
                }),
                result))
-    .then(_ => Promise.all(existingPeers.map(TestingConnection.run)))
+    .then(_ => Promise.all(existingPeers.map(TestingConnection.run)),
+          _ => [])
     .then(results => {
         stream.getTracks().forEach(track => track.stop());
         console.info('Completed %s tests.', results.length);
