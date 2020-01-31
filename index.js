@@ -45,14 +45,18 @@ function heartbeatSSE(res, comment = '') {
     res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
     res.flushHeaders();    
 }
+function listingData(req) {
+    return JSON.stringify({ip: req.ip, peers: Object.keys(registrants)});
+}
 app.post('/message', function (req, res) {
     const clientPipe = registrants[req.body.to];
     if (!clientPipe) return res.status(404).send("Not found");
-    // Alas, the EventSource standard does not provide a 'scope' field with which the client
-    // can direct the data to the right client-side target, so we have to embed that in data.
-    console.log(new Date(), `sse message ${clientPipe.sseMessageId} ${JSON.stringify(req.body.data).slice(0, 100)}...`);
+    if (req.body.type === 'listing') { // Hack special case
+        req.rawBody = listingData(req);
+    }
     const messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
     res.end(JSON.stringify({id: messageId}));
+    console.log(new Date(), `sse message ${clientPipe.sseMessageId} ${JSON.stringify(req.body.data).slice(0, 100)}...`);
 });
 
 app.get('/messages/:id', function (req, res) {
@@ -77,7 +81,7 @@ app.get('/messages/:id', function (req, res) {
     // In this application, we tell each new registrant about all existing ones.
     // TODO: decide whether to do this in production. Separate method?
     // Note that, for now, we do not broadcast new registrants to existing ones. No need.
-    sendSSE(res, JSON.stringify({ip: req.ip, peers: Object.keys(registrants)}), 'listing');
+    sendSSE(res, listingData(req), 'listing');
     //heartbeatSSE(res); // comment forces open event on other end
     registrants[id] = res;
 });
