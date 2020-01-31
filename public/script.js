@@ -45,7 +45,7 @@ function report(data) {
     console.info("Test " + guid + (FAILED ? " failed: " : " passed:\n"), data);
     window.result = data;
     const keys = [
-        "date","tzOffset", "ip", "concurrency", "peer",
+        "date","tzOffset", "ip", "peerIp", "peer", "concurrency",
         "wsSetup","wsPing","wsKbs",
         "sseSetup","ssePing","sseKbs",
         "dataSetup","dataPing","dataKbs",
@@ -208,10 +208,13 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
             // We're now setup.
             collector[setupKey] = skipSetup ? -1 : (Date.now() - start);
             console.log(setupKey, collector[setupKey]);
-            channel.onmessage = _ => {
+            channel.onmessage = event => {
                 // We got the ping.
                 collector[pingKey] = Date.now() - start;
                 console.log(pingKey, collector[pingKey]);
+                if (label === 'data') { // hack special case
+                    collector.peerIp = event.data;
+                }
                 channel.onmessage = messageEvent => {
                     // We got the data block.
                     const elapsed = Date.now() - start;
@@ -308,7 +311,8 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
                 console.log('Got', event.data, 'from', this.peerId);
                 switch (event.data.slice(0, 4)) {
                 case 'ping':
-                    channel.send('pong');
+                    // Server should not send other people's data, but the peer can.
+                    channel.send(browserData.ip);
                     break;
                 case 'data':
                     channel.send(data);
