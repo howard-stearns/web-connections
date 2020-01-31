@@ -257,7 +257,54 @@ function test(label, channel, send, collector) {
     });
 }
 
+function updateTestingMessage() {
+    var message = "Thank you for sharing your computer" + (stream ? " and webcam.": ".") + " Testing ";
+    if (browserData.concurrency) {
+        const peers = browserData.concurrency === 1 ? "1 peer" : "" + browserData.concurrency + " peers";
+        message += "among " + peers + "... It will be at least "
+            + seconds + " seconds before results start showing above.";
+    } else {
+        message += "...";
+    }
+    userMessages.innerHTML = message;
+}
+
 var existingPeers, stream, webcamTimer, webSocket;
+function initEventsource() {
+    eventSource = new EventSource(`/messages/${guid}`);
+
+    // We will immediately be given a listing of currently connected peers. Save it for later
+    function listingHandler(messageEvent) {
+        const message = JSON.parse(messageEvent.data);
+        console.log('listingHandler', message);
+        // Hitting refresh can sometimes allow our guid to still be registered.
+        // We need two different EventSource to test loopback, but then we'd be registered twice and things would get weird.
+        existingPeers = message.peers.filter(p => p !== guid);
+        browserData.concurrency = existingPeers.length;
+        browserData.ip = message.ip;
+        updateTestingMessage();
+    }
+    eventSource.addEventListener('listing', listingHandler);
+
+    // We will now be reported to others, so respond if they start to connect to us.
+    function peerEventHandler(messageEvent) {
+        const message = JSON.parse(messageEvent.data);
+        // This could be a renegotiation of something that already has it's own connection.
+        if (respondingConnections[message.from]) return;
+        // Create a responder and let it act on the offer.
+        respondingConnections[message.from] = new RespondingConnection(message);
+    }
+    eventSource.addEventListener('offer', peerEventHandler);
+
+    // Server will timeout the connection, but a reload produce confusing results unless we play nice.
+    window.addEventListener('beforeunload', event => {
+        eventSource.removeEventListener('listing', listingHandler);
+        eventSource.removeEventListener('offer', peerEventHandler);
+        eventSource.close()
+    });
+}
+
+
 new Promise((resolve, reject) => { // Ask for webcam
     if (FAILED) reject("Missing required functionality.");
     if (!browserData.av) return resolve(false);
@@ -273,8 +320,7 @@ new Promise((resolve, reject) => { // Ask for webcam
           error => console.error(error))
     .then(_ => {
         clearTimeout(webcamTimer);
-        userMessages.innerHTML = "Thank you for sharing your computer" + (stream ? " and webcam.": ".")
-            + " Testing... It will be at least " + seconds + " seconds before results start showing above.";
+        updateTestingMessage();
         webSocket = new WebSocket(`${wsSite}/${guid}`);
         return test('ws',
                     webSocket,
@@ -283,34 +329,7 @@ new Promise((resolve, reject) => { // Ask for webcam
     })
     .then(result => {
         webSocket.close();
-
-        eventSource = new EventSource(`/messages/${guid}`);
-        // We will immediately be given a listing of currently connected peers. Save it for later
-        function listingHandler(messageEvent) {
-            const message = JSON.parse(messageEvent.data);
-            console.log('listingHandler', message);
-            // Hitting refresh can sometimes allow our guid to still be registered.
-            // We need two different EventSource to test loopback, but then we'd be registered twice and things would get weird.
-            existingPeers = message.peers.filter(p => p !== guid);
-            browserData.concurrency = existingPeers.length;
-            browserData.ip = message.ip;
-        }
-        eventSource.addEventListener('listing', listingHandler);
-        // We will now be reported to others, so respond if they start to connect to us.
-        function peerEventHandler(messageEvent) {
-            const message = JSON.parse(messageEvent.data);
-            // This could be a renegotiation of something that already has it's own connection.
-            if (respondingConnections[message.from]) return;
-            // Create a responder and let it act on the offer.
-            respondingConnections[message.from] = new RespondingConnection(message);
-        }
-        eventSource.addEventListener('offer', peerEventHandler);
-        // Server will timeout the connection, but a reload produce confusing results unless we play nice.
-        window.addEventListener('beforeunload', event => {
-            eventSource.removeEventListener('listing', listingHandler);
-            eventSource.removeEventListener('offer', peerEventHandler);
-            eventSource.close()
-        });
+        initEventSource();
         return result;
     })
     .then(result => test('sse',
@@ -322,11 +341,11 @@ new Promise((resolve, reject) => { // Ask for webcam
                          }),
                          result))
     .then(_ => Promise.all(existingPeers.map(TestingConnection.run)),
-          _ => [])
+          error => console.error(error))
     .then(results => {
         stream.getTracks().forEach(track => track.stop());
         console.info('Completed %s peer tests.', results.length);
         if (!results.length) report(browserData);
-        userMessages.innerHTML = "Testing is complete. If you can, <b>please leave this page up</b> so that other people can test to you with higher concurrency. (No futher webcam or audio data will be used, however.)"
+        userMessages.innerHTML = "Testing is complete. If you can, <b>please leave this page up</b> so that other people can test with you at higher concurrency. (No futher webcam or audio data will be used, however.)"
     });
 
