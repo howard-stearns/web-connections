@@ -76,7 +76,11 @@ function report(data) {
 }
 Object.keys(browserData).forEach(function (key) {
     document.getElementById(key).checked = browserData[key];
-    if (!browserData[key] && (key != 'av')) FAILED = true;
+    if (!browserData[key] && (key != 'av')) {
+        FAILED = true;
+        browserData.concurrency = browserData.concurrency || 'missing:';
+        browserData.concurrency += ' ' + key;
+    }
 });
 ourId.innerHTML = browserData.id = guid; 
 agent.innerHTML = browserData.agent = navigator.userAgent;
@@ -87,34 +91,27 @@ browserData.tzOffset = now.getTimezoneOffset();
 if (FAILED) report(browserData);
 localStorage.setItem(ID_KEY, guid);
 
-// Testing:
+// Communications:
 
-var block = '', blockSize = 1<<15; // 32k 1-byte chracters (UTF-8)
-for (var i = 0; i < blockSize; i++) { block += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i % 26]; }
-const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
-const wsSite = protocol + "//" + location.host;
-var eventSource;
-const testConnections = {};
-const respondingConnections = {};
-const RTC_CONFIGURATION = {
-    iceServers: [
-        {urls: 'stun:ice.highfidelity.com'},
-    ]
-};
-
-function updateTestingMessage() {
-    var message = "Thank you for sharing your computer" + (stream ? " and webcam.": ".") + " Testing ";
-    if (browserData.concurrency) {
-        const peers = browserData.concurrency === 1 ? "1 peer" : "" + browserData.concurrency + " peers";
-        message += "among " + peers + "... It will be at least "
-            + MEDIA_RUNTIME_SECONDS + " seconds before results start showing above.";
-    } else {
-        message += "...";
-    }
-    userMessages.innerHTML = message;
+function initWebSocket() {
+    webSocket = new WebSocket(`${wsSite}/${guid}`);
 }
 
-var existingPeers = [], stream, webcamTimer, webSocket;
+function sendSelfMessage(data, type) { // Returns a promise
+    const message = {to: guid, from: guid};
+    if (data !== undefined) message.data = data;
+    if (type !== undefined) message.type = type;
+    return fetch('/message', {
+        method: 'post',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(message)
+    });
+}
+
+function sendWebsocketMessage(data) { // Returns a promise
+    return Promise.resolve(webSocket.send(JSON.stringify({to: guid, from: guid, data: data})));
+}
+
 function initEventSource() {
     if (eventSource) return sendSelfMessage(undefined, 'listing');
 
@@ -150,15 +147,33 @@ function initEventSource() {
         eventSource.close()
     });
 }
-function sendSelfMessage(data, type) {
-    const message = {to: guid, from: guid};
-    if (data !== undefined) message.data = data;
-    if (type !== undefined) message.type = type;
-    return fetch('/message', {
-        method: 'post',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(message)
-    });
+
+
+// Testing:
+
+var block = '', blockSize = 1<<15; // 32k 1-byte chracters (UTF-8)
+for (var i = 0; i < blockSize; i++) { block += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i % 26]; }
+const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
+const wsSite = protocol + "//" + location.host;
+var eventSource, existingPeers = [], stream, webSocket;
+const testConnections = {};
+const respondingConnections = {};
+const RTC_CONFIGURATION = {
+    iceServers: [
+        {urls: 'stun:ice.highfidelity.com'},
+    ]
+};
+
+function updateTestingMessage() {
+    var message = "Thank you for sharing your computer" + (stream ? " and webcam.": ".") + " Testing ";
+    if (browserData.concurrency) {
+        const peers = browserData.concurrency === 1 ? "1 peer" : "" + browserData.concurrency + " peers";
+        message += "among " + peers + "... It will be at least "
+            + MEDIA_RUNTIME_SECONDS + " seconds before results start showing above.";
+    } else {
+        message += "...";
+    }
+    userMessages.innerHTML = message;
 }
 
 // Answer Date.now(), but also start a timer that will reject the test if
@@ -172,6 +187,14 @@ function startSubtest(milliseconds, collector, key, reject) {
         }
     }, milliseconds);
     return Date.now();
+}
+
+// Returns a function suitable for .catch(notarizeFailure(...)).
+function notarizeFailure(collector, key) {
+    return error => {
+        console.error(key, error);
+        collector[key] = error.message || error;
+    };
 }
 
 // Returns a promise resolving to collector with results of setup, ping and bandwidth noted.
@@ -210,7 +233,28 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
         }
         var start = startSubtest(5000, collector, setupKey, reject);
         if (skipSetup) channel.onopen();
-    });
+    }).catch(notarizeFailure(collector, setupKey));
+}
+
+// Returns a promise resolving to a media stream.
+function obtainMediaStream(browserHasMedia, collector, key) {
+    var webcamTimer;
+    return new Promise((resolve, reject) => {
+
+        if (!browserHasMedia) return reject('SKIPPED');
+
+        userMessages.innerHTML = "Allowing webcam and microphone helps us to gauge media transfer. "
+            + "It will not be displayed or recorded anywhere, and will be turned off at the conclusion of testing."
+
+        webcamTimer = setTimeout(_ => reject('IGNORED'), 10 * 1000);
+
+        navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(resolve, reject)
+    })
+        .catch(notarizeFailure(collector, key))
+        .then(mediaStream => {
+            clearTimeout(webcamTimer);
+            return mediaStream;
+        });
 }
 
 var contributionCount = 0;
@@ -291,32 +335,7 @@ class TestingConnection extends CommonConnection {
         return testSetupPingBandwidth('data', connection.channel,
                                       data => connection.channel.send(data),
                                       connection.results)
-            .then(collector => { // Now check video
-                const nTracksKey = 'nTracks';
-                collector[nTracksKey] = 0;
-                return new Promise((resolve, reject) => {
-                    var tracksReceived = 0;
-                    const setupKey = 'mediaSetup';
-                    if (!stream) { collector[setupKey] = 'SKIPPED'; return resolve(collector); }
-                    connection.channel.onmessage = event => {
-                        if (!['audio', 'video'].includes(event.data)) {
-                            return console.error("Unexpected video message %s from %s", event.data, connection.peerId);
-                        }
-                        if (++tracksReceived < collector[nTracksKey]) return;
-                        collector[setupKey] = Date.now() - start;
-                        console.log(setupKey, collector[setupKey], 'track', tracksReceived, '/', collector[nTracksKey]);
-                        mediaStartTime = Date.now();
-                        setTimeout(_ => resolve(collector), MEDIA_RUNTIME_SECONDS * 1000); // Get 10 seconds of audio to collect stats on
-                    };
-                    // Now start the video
-                    var start = startSubtest(5000, collector, setupKey, reject);
-                    stream.getTracks().forEach(track => {
-                        connection.peer.addTrack(track, stream);
-                        collector[nTracksKey]++;
-                    });
-                });
-            })
-            .then(collector => stream && (collector.mediaRuntime = Date.now() - mediaStartTime))
+            .then(_ => connection.testMedia())
             .then(_ => connection.peer.getStats())
             .then(stats => {
                 stats.forEach(report => {
@@ -334,43 +353,56 @@ class TestingConnection extends CommonConnection {
         super(peerId);
         this.initDataChannel(this.peer.createDataChannel(`${this.id} => ${this.peerId}`));
     }
+    testMedia() {
+        const nTracksKey = 'nTracks';
+        const setupKey = 'mediaSetup';
+        const collector = this.results;
+        var mediaStartTime
+        collector[nTracksKey] = 0;
+        return new Promise((resolve, reject) => {
+            var tracksReceived = 0;
+            if (!stream) return resolve(); // obtainMediaStream already recorded whatever needs recording
+            this.channel.onmessage = event => {
+                if (!['audio', 'video'].includes(event.data)) {
+                    return console.error("Unexpected video message %s from %s", event.data, this.peerId);
+                }
+                if (++tracksReceived < collector[nTracksKey]) return;
+                collector[setupKey] = Date.now() - start;
+                console.log(setupKey, collector[setupKey], 'track', tracksReceived, '/', collector[nTracksKey]);
+                mediaStartTime = Date.now();
+                setTimeout(_ => resolve(collector), MEDIA_RUNTIME_SECONDS * 1000); // Get 10 seconds of audio to collect stats on
+            };
+            // Now start the video
+            var start = startSubtest(5000, collector, setupKey, reject);
+            stream.getTracks().forEach(track => {
+                this.peer.addTrack(track, stream);
+                collector[nTracksKey]++;
+            });
+        })
+            .then(_ => stream && (collector.mediaRuntime = Date.now() - mediaStartTime))
+            .catch(notarizeFailure(collector, setupKey));
+    }
 }
 
 function doAllTests() {
     retest.disabled = true;
-    new Promise((resolve, reject) => { // Ask for webcam
-        if (FAILED) reject("Missing required functionality.");
-        if (!browserData.av) return resolve(false);
-        userMessages.innerHTML = "Allowing webcam and microphone helps us to gauge media transfer. It will not be displayed or recorded anywhere, and will be turned off at the conclusion of testing."
-        webcamTimer = setTimeout(_ => {
-            console.log('webcam timer went off');
-            browserData.unresponsiveToMedia = true;
-            resolve(false);
-        }, 10 * 1000);
-        navigator.mediaDevices.getUserMedia({video: true, audio: true})
-            .catch(error => console.error('webcam:', error))
-            .then(resolve);
-    })
-        .then(media => stream = media)
-        .then(_ => {
-            clearTimeout(webcamTimer);
-            updateTestingMessage();
-            webSocket = new WebSocket(`${wsSite}/${guid}`);
-            return testSetupPingBandwidth('ws',
-                                          webSocket,
-                                          data => Promise.resolve(webSocket.send(JSON.stringify({to: guid, from: guid, data: data}))),
-                                          browserData);
-        })
+    if (FAILED) return console.error("Missing required functionality.");
+    obtainMediaStream(browserData.av, browserData, 'mediaSetup') // Just once...
+        .then(media => stream = media) // ... and shared among each RTCPeerConnection
+        .then(updateTestingMessage)
+        .then(initWebSocket)
+        .then(_ => testSetupPingBandwidth('ws', webSocket, sendWebsocketMessage, browserData))
         .then(_ => webSocket.close())
         .then(initEventSource)
         .then(reinited => testSetupPingBandwidth('sse', eventSource, sendSelfMessage, browserData, !!reinited))
-        .catch(error => console.error('Setup tests', error))
         .then(_ => Promise.all(existingPeers.map(TestingConnection.run)))
         .then(results => {
             stream && stream.getTracks().forEach(track => track.stop());
             console.info('Completed %s peer tests.', results.length);
             if (!results.length) report(browserData);
-            userMessages.innerHTML = "Testing is complete. If you can, <b>please leave this page up</b> so that other people can test with you at higher concurrency. (No futher webcam or audio data will be used, however.)";
+            userMessages.innerHTML = "Testing is complete. If you can,"
+                + " <b>please leave this page up</b> so that other people can test with you at higher concurrency."
+                + " (No futher webcam or audio data will be used, however.)";
             retest.disabled = false;
         })
 }
