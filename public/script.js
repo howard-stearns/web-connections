@@ -29,7 +29,7 @@ var guid = (window.localStorage && localStorage.getItem(ID_KEY)) || uuidv4();
 
 // Reporting:
 const FAIL_VALUE = 'FAIL';
-const seconds = 10;
+const MEDIA_RUNTIME_SECONDS = 10;
 const mediaReportMap = {
     'outbound-rtp': {
         audio: ['bytesSent', 'nackCount', 'packetsSent'],
@@ -107,7 +107,7 @@ function updateTestingMessage() {
     if (browserData.concurrency) {
         const peers = browserData.concurrency === 1 ? "1 peer" : "" + browserData.concurrency + " peers";
         message += "among " + peers + "... It will be at least "
-            + seconds + " seconds before results start showing above.";
+            + MEDIA_RUNTIME_SECONDS + " seconds before results start showing above.";
     } else {
         message += "...";
     }
@@ -306,7 +306,7 @@ class TestingConnection extends CommonConnection {
                         collector[setupKey] = Date.now() - start;
                         console.log(setupKey, collector[setupKey], 'track', tracksReceived, '/', collector[nTracksKey]);
                         mediaStartTime = Date.now();
-                        setTimeout(_ => resolve(collector), seconds * 1000); // Get 10 seconds of audio to collect stats on
+                        setTimeout(_ => resolve(collector), MEDIA_RUNTIME_SECONDS * 1000); // Get 10 seconds of audio to collect stats on
                     };
                     // Now start the video
                     var start = startSubtest(5000, collector, setupKey, reject);

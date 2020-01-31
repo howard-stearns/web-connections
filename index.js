@@ -84,7 +84,7 @@ app.get('/messages/:id', function (req, res) {
     const heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
     registrants[id] = res;
 });
-const HEROKU_PROXY_TIMEOUT_MS = 15 * 1000;
+const HEROKU_PROXY_TIMEOUT_MS = 10 * 1000;
 
 const wsRegistrants = {};
 app.ws('/:id', function (ws, req) {
