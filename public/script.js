@@ -96,6 +96,11 @@ const wsSite = protocol + "//" + location.host;
 var eventSource;
 const testConnections = {};
 const respondingConnections = {};
+const RTC_CONFIGURATION = {
+    iceServers: [
+        {urls: 'stun:ice.highfidelity.com'},
+    ]
+};
 
 function updateTestingMessage() {
     var message = "Thank you for sharing your computer" + (stream ? " and webcam.": ".") + " Testing ";
@@ -211,7 +216,7 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
 var contributionCount = 0;
 class CommonConnection extends EventSourceRTC { // Connection to whatever we are testing with. Two subclasses, below.
     constructor(peerId) {
-        super(eventSource, guid, peerId);
+        super(eventSource, guid, peerId, RTC_CONFIGURATION);
         this.closeMessageHandler =  messageEvent => {
             // Either end can close, by sending a message. We use the signalling channel because
             // there no completely supported way to tell if an RTCPeerConnection or RTCDataChannel

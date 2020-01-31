@@ -41,7 +41,7 @@ function sendSSE(res, data, type = '') {
     res.flushHeaders();
     return messageId;
 }
-function heartbeatSSE(res, comment = '') {
+function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces open event on other end
     res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
     res.flushHeaders();    
 }
@@ -56,13 +56,11 @@ app.post('/message', function (req, res) {
     }
     const messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
     res.end(JSON.stringify({id: messageId}));
-    console.log(new Date(), `sse message ${clientPipe.sseMessageId} ${JSON.stringify(req.body.data).slice(0, 100)}...`);
+    console.log(new Date(), `sse message ${clientPipe.sseMessageId} ${(JSON.stringify(req.body.data) || "").slice(0, 100)}...`);
 });
 
 app.get('/messages/:id', function (req, res) {
     const id = req.params.id;
-    // SSE headers and http status to keep connection open
-    // TODO: heartbeat
     // TODO: reject requests that don't accept this content-type.
     const headers = {
         'Content-Type': 'text/event-stream',
@@ -75,6 +73,7 @@ app.get('/messages/:id', function (req, res) {
 
     req.on('close', () => {
         console.log(new Date(), 'SSE connection closed', id);
+        clearInterval(heartbeat);
         delete registrants[id];
     });
 
@@ -82,9 +81,10 @@ app.get('/messages/:id', function (req, res) {
     // TODO: decide whether to do this in production. Separate method?
     // Note that, for now, we do not broadcast new registrants to existing ones. No need.
     sendSSE(res, listingData(req), 'listing');
-    //heartbeatSSE(res); // comment forces open event on other end
+    const heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
     registrants[id] = res;
 });
+const HEROKU_PROXY_TIMEOUT_MS = 15 * 1000;
 
 const wsRegistrants = {};
 app.ws('/:id', function (ws, req) {
