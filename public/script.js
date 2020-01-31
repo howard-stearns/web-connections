@@ -114,7 +114,7 @@ function updateTestingMessage() {
     userMessages.innerHTML = message;
 }
 
-var existingPeers, stream, webcamTimer, webSocket;
+var existingPeers = [], stream, webcamTimer, webSocket;
 function initEventSource() {
     if (eventSource) return sendSelfMessage(undefined, 'listing');
 
@@ -296,8 +296,8 @@ class TestingConnection extends CommonConnection {
                 collector[nTracksKey] = 0;
                 return new Promise((resolve, reject) => {
                     var tracksReceived = 0;
-                    if (!stream) return resolve(collector);
                     const setupKey = 'mediaSetup';
+                    if (!stream) { collector[setupKey] = 'SKIPPED'; return resolve(collector); }
                     connection.channel.onmessage = event => {
                         if (!['audio', 'video'].includes(event.data)) {
                             return console.error("Unexpected video message %s from %s", event.data, connection.peerId);
@@ -347,7 +347,9 @@ function doAllTests() {
             browserData.unresponsiveToMedia = true;
             resolve(false);
         }, 10 * 1000);
-        navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(resolve);
+        navigator.mediaDevices.getUserMedia({video: true, audio: true})
+            .catch(error => console.error('webcam:', error))
+            .then(resolve);
     })
         .then(media => stream = media)
         .then(_ => {
@@ -362,15 +364,15 @@ function doAllTests() {
         .then(_ => webSocket.close())
         .then(initEventSource)
         .then(reinited => testSetupPingBandwidth('sse', eventSource, sendSelfMessage, browserData, !!reinited))
+        .catch(error => console.error('Setup tests', error))
         .then(_ => Promise.all(existingPeers.map(TestingConnection.run)))
         .then(results => {
-            stream.getTracks().forEach(track => track.stop());
+            stream && stream.getTracks().forEach(track => track.stop());
             console.info('Completed %s peer tests.', results.length);
             if (!results.length) report(browserData);
             userMessages.innerHTML = "Testing is complete. If you can, <b>please leave this page up</b> so that other people can test with you at higher concurrency. (No futher webcam or audio data will be used, however.)";
             retest.disabled = false;
         })
-        .catch(error => console.error(error))
 }
 doAllTests();
 
