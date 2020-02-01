@@ -57,7 +57,7 @@ function report(data) {
         "remote-inbound-rtp-audio-bytesReceived","remote-inbound-rtp-audio-jitter","remote-inbound-rtp-audio-packetsLost","remote-inbound-rtp-audio-packetsReceived","remote-inbound-rtp-audio-roundTripTime",
         "remote-inbound-rtp-video-bytesReceived","remote-inbound-rtp-video-jitter","remote-inbound-rtp-video-packetsLost","remote-inbound-rtp-video-packetsReceived","remote-inbound-rtp-video-roundTripTime"];
     const row = document.createElement('tr');
-    keys.forEach(key => {
+    keys.forEach(function (key) {
         const item = document.createElement('td');
         var value = data[key];
         if (value === undefined) {
