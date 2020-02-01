@@ -73,7 +73,14 @@ function report(data) {
         row.appendChild(item);
     });
     table.appendChild(row);
+    fetch("https://hifi-telemetric.herokuapp.com/gimmedata", {
+        method: 'post',
+        mode: 'no-cors',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).catch(error => console.error('post', error));
 }
+
 Object.keys(browserData).forEach(function (key) {
     document.getElementById(key).checked = browserData[key];
     if (!browserData[key] && (key != 'av')) {
