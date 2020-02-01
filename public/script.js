@@ -1,6 +1,7 @@
 'use strict';
 
 // Basic info for reporting:
+// Everything through the first call to report() on FAILED should work in IE9
 var FAILED = false;
 var dummy = window.RTCPeerConnection && new window.RTCPeerConnection();
 var browserData = {
@@ -14,7 +15,8 @@ var browserData = {
 }
 dummy = null;
 
-function uuidv4(label = '') { // Not crypto strong, but good enough for prototype.
+function uuidv4(label) { // Not crypto strong, but good enough for prototype.
+    label = label || '';
     return label + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
