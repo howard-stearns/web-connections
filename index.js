@@ -28,6 +28,10 @@ app.post('/upload', function (req, res) {
     }, forwardResponse => {
         forwardResponse.on('data', d => {
             data = d.toString();
+            // Good form to send content-type. E.g., because the client is using XMLHttpRequest
+            // for MSIE compatability, Firefox will spit out a noisy error about the response not
+            // being good XML (unless we declare the content-type).
+            res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
             res.end(data);
             console.log('responded', data);
         });
@@ -73,6 +77,7 @@ app.post('/message', function (req, res) {
         req.rawBody = listingData(req);
     }
     const messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
+    res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
     res.end(JSON.stringify({id: messageId}));
     console.log(new Date(), `sse message ${clientPipe.sseMessageId} ${(JSON.stringify(req.body.data) || "").slice(0, 100)}...`);
 });
