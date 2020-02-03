@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const bodyParser = require('body-parser');
+const https = require('https'); // for forwarding to hifi-telemetric
 
 process.title = "p2p-load-test";
 const app = express();
@@ -17,6 +18,23 @@ function rawBodySaver(req, res, buf, encoding) {
 }
 app.use(bodyParser.json({verify: rawBodySaver}));
 app.use(bodyParser.urlencoded({extended: true}));
+
+app.post('/upload', function (req, res) {
+    console.log('uploaded', req.rawBody);
+    var data;
+    const forward = https.request("https://hifi-telemetric.herokuapp.com/gimmedata", {
+        method: 'post',
+        headers: {'Content-Type': 'application/json'}
+    }, forwardResponse => {
+        forwardResponse.on('data', d => {
+            data = d.toString();
+            res.end(data);
+            console.log('responded', data);
+        });
+    });
+    forward.on('error', e => console.error('forward', e));
+    forward.end(req.rawBody);
+});
 
 /*
 P2P Message Proxy

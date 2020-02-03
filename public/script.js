@@ -75,12 +75,20 @@ function report(data) {
         row.appendChild(item);
     });
     table.appendChild(row);
-    fetch("https://hifi-telemetric.herokuapp.com/gimmedata", {
+    console.log('uploading', data);
+    /* This is what we would want, but we still want to gather failure results from MSIE...
+    fetch("/upload", {
         method: 'post',
-        mode: 'no-cors',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
-    }).catch(error => console.error('post', error));
+    })
+        .catch(error => console.error('post', error));
+    */
+    var xmlhttp = new XMLHttpRequest();
+    xmlhttp.open("POST", "/upload");
+    xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    xmlhttp.send(JSON.stringify(data));
+    xmlhttp.addEventListener("loadend", console.log);
 }
 
 Object.keys(browserData).forEach(function (key) {
