@@ -130,7 +130,8 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
                 channel.onmessage = messageEvent => {
                     // We got the data block.
                     const elapsed = Date.now() - start;
-                    collector[bandwidthKey] = messageEvent.data.length * 8 / elapsed;
+                    const envelope = messageEvent.data;
+                    collector[bandwidthKey] = envelope.length * 8 / elapsed;
                     console.log(bandwidthKey, collector[bandwidthKey]);
 
                     // Cleanup
@@ -220,17 +221,18 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
             const channel = event.channel;
             this.initDataChannel(channel);
             channel.onmessage = event => {
-                console.log('Got', event.data, 'from', this.peerId);
-                switch (event.data.slice(0, 4)) {
+                const message = event.data;
+                console.log('Got', message, 'from', this.peerId);
+                switch (message.slice(0, 4)) {
                 case 'ping':
                     // Server should not send other people's data, but the peer can.
                     channel.send(browserData.ip);
                     break;
                 case 'data':
-                    channel.send(data);
+                    channel.send(message);
                     break;
                 default:
-                    console.error('Unrecognized data', event.data, 'from', this.peerId);
+                    console.error('Unrecognized data', message, 'from', this.peerId);
                 }
             };
         };

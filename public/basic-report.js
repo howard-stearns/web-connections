@@ -10,7 +10,7 @@ var browserData = {
     ws: !!window.WebSocket,
     sse: !!window.EventSource,
     rtc: !!window.RTCPeerConnection,
-    data: dummy && !!dummy.createDataChannel,
+    dchan: dummy && !!dummy.createDataChannel,
     av: navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia
 }
 dummy = null;
