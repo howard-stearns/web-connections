@@ -108,6 +108,10 @@ browserData.tzOffset = now.getTimezoneOffset();
 if (FAILED) report(browserData);
 localStorage.setItem(ID_KEY, guid);
 
+var WebSocket = window.WebSocket || ReferenceError;
+var EventSource = window.EventSource || ReferencError;
+var Promise = window.Promise || ReferenceError;
+
 // Communications:
 
 function initWebSocket() {
