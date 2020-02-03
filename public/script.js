@@ -240,8 +240,9 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
     }
     close() {
         super.close();
-        this.peer.removeEventListener('track', this.trackHandler);
-        this.peer.ondatachannel = this.channel.onmessage = null;
+        this.peer && this.peer.removeEventListener('track', this.trackHandler);
+        this.peer && (this.peer.ondatachannel = null);
+        this.channel && (this.channel.onmessage = null);
     }
 }
 

@@ -9,6 +9,8 @@ var browserData = {
     storage: !!window.localStorage,
     ws: !!window.WebSocket,
     sse: !!window.EventSource,
+    s2t: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    t2s: !!window.speechSynthesis,
     rtc: !!window.RTCPeerConnection,
     dchan: dummy && !!dummy.createDataChannel,
     av: navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia
@@ -93,7 +95,7 @@ function report(data) {
 
 Object.keys(browserData).forEach(function (key) {
     document.getElementById(key).checked = browserData[key];
-    if (!browserData[key] && (key != 'av')) {
+    if (!browserData[key] && ['av', 't2s', 's2t'].indexOf(key) < 0) {
         FAILED = true;
         browserData.concurrency = browserData.concurrency || 'missing:';
         browserData.concurrency += ' ' + key;
