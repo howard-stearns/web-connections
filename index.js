@@ -26,13 +26,17 @@ app.use(bodyParser.json({verify: rawBodySaver}));
 app.use(bodyParser.urlencoded({extended: true}));
 
 app.post('/upload', function (req, res) {
-    var data;
-    const forward = https.request("https://hifi-telemetric.herokuapp.com/gimmedata", {
+    const forward = https.request({
+        hostname: "hifi-telemetric.herokuapp.com",
+        path: "/gimmedata",
         method: 'post',
-        headers: {'Content-Type': 'application/json'}
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': req.rawBody.length
+        }
     }, forwardResponse => {
         forwardResponse.on('data', d => {
-            data = d.toString();
+            const data = d.toString();
             // Good form to send content-type. E.g., because the client is using XMLHttpRequest
             // for MSIE compatability, Firefox will spit out a noisy error about the response not
             // being good XML (unless we declare the content-type).
@@ -74,7 +78,6 @@ function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces ope
 function listingData(req) {
     return JSON.stringify({ip: req.ip, peers: Object.keys(registrants)});
 }
-
 app.post('/message', function (req, res) {
     const clientPipe = registrants[req.body.to];
     if (!clientPipe) return res.status(404).send("Not found");
@@ -88,7 +91,16 @@ app.post('/message', function (req, res) {
     res.end(JSON.stringify({id: messageId}));
 });
 
+function closeRegistrant(res) {
+    clearInterval(res.heartbeat);
+    delete registrants[res.guid];
+    res.originalRequest.method = 'DELETE'; // For logging purposes.
+    res.end();
+}
+
+var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.
 app.get('/messages/:id', function (req, res) {
+    if (!acceptingRegistrants) return res.status(503).send("Not Available");
     const id = req.params.id;
     // TODO: reject requests that don't accept this content-type.
     const headers = {
@@ -101,18 +113,15 @@ app.get('/messages/:id', function (req, res) {
     res.sseMessageId = 0;
     pseudo.info(req);
 
-    req.on('close', () => {
-        clearInterval(heartbeat);
-        delete registrants[id];
-        req.method = 'DELETE'; // For logging purposes.
-        res.end();
-    });
+    req.on('close', _ => closeRegistrant(res));
 
     // In this application, we tell each new registrant about all existing ones.
     // TODO: decide whether to do this in production. Separate method?
     // Note that, for now, we do not broadcast new registrants to existing ones. No need.
     sendSSE(res, listingData(req), 'listing');
-    const heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
+    res.guid = id;
+    res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
+    res.originalRequest = req; // For logging when it closes.
     registrants[id] = res;
 });
 const HEROKU_PROXY_TIMEOUT_MS = 10 * 1000;
@@ -145,4 +154,25 @@ app.ws('/:id', function (ws, req) {
     });
 });
 
-app.listen(PORT);
+const server = app.listen(PORT);
+
+const puppeteer = require('puppeteer');
+var browser = {close: _ => Promise.resolve()};
+async function client() {
+    browser = await puppeteer.launch({headless: true});
+        const page = await browser.newPage();
+    await page.goto(`http://localhost:${PORT}/`);
+    page.on('console', msg => console.info('client:', msg.text()));
+    await page.evaluate(() => window.isHeadless = true);
+}
+client();
+
+function handle(signal) {
+    console.log('Received', signal);
+    acceptingRegistrants = false
+    server.close(_ => console.log('Closed server'));
+    Object.values(registrants).forEach(res => closeRegistrant(res));
+    browser.close();
+}
+process.on('SIGINT', handle);
+process.on('SIGTERM', handle);

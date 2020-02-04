@@ -28,11 +28,12 @@ function initEventSource() {
     if (eventSource) return sendSelfMessage(undefined, 'listing');
 
     eventSource = new EventSource(`/messages/${guid}`);
+    eventSource.onerror = e => console.error('event source error', e);
 
     // We will immediately be given a listing of currently connected peers. Save it for later
     function listingHandler(messageEvent) {
         const message = JSON.parse(messageEvent.data);
-        console.log('listingHandler', message);
+        console.log('listingHandler', messageEvent.data);
         // Hitting refresh can sometimes allow our guid to still be registered.
         // We need two different EventSource to test loopback, but then we'd be registered twice and things would get weird.
         existingPeers = message.peers.filter(p => p !== guid);
@@ -195,7 +196,7 @@ class CommonConnection extends EventSourceRTC { // Connection to whatever we are
             const connection = dictionary[peerId];
             if (connection) {
                 delete dictionary[peerId];
-                console.info('Finished %s %s.', label, peerId);
+                console.info('Finished', label, peerId);
                 return true;
             }
         }
@@ -221,9 +222,10 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
             const channel = event.channel;
             this.initDataChannel(channel);
             channel.onmessage = event => {
-                const message = event.data;
-                console.log('Got', message, 'from', this.peerId);
-                switch (message.slice(0, 4)) {
+                const message = event.data,
+                      key = message.slice(0, 4);
+                console.log('Got', key, 'from', this.peerId);
+                switch (key) {
                 case 'ping':
                     // Server should not send other people's data, but the peer can.
                     channel.send(browserData.ip);
@@ -260,7 +262,8 @@ class TestingConnection extends CommonConnection {
                 stats.forEach(report => {
                     const kinds = mediaReportMap[report.type];
                     if (!kinds) return;
-                    kinds[report.kind].forEach(key => connection.results[[report.type, report.kind, key].join('-')] = report[key]);
+                    kinds[report.kind].forEach(key => (report[key] !== undefined)
+                                               && (connection.results[[report.type, report.kind, key].join('-')] = report[key]));
                 });
                 connection.channel.onmessage = null;
             })
@@ -317,7 +320,7 @@ function doAllTests() {
         .then(_ => Promise.all(existingPeers.map(TestingConnection.run)))
         .then(results => {
             stream && stream.getTracks().forEach(track => track.stop());
-            console.info('Completed %s peer tests.', results.length);
+            console.info(`Completed ${results.length} peer tests.`);
             if (!results.length) report(browserData);
             userMessages.innerHTML = "Testing is complete. If you can,"
                 + " <b>please leave this page up</b> so that other people can test with you at higher concurrency."
@@ -325,5 +328,5 @@ function doAllTests() {
             retest.disabled = false;
         })
 }
-doAllTests();
+window.onload = doAllTests;
 

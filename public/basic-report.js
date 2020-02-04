@@ -46,7 +46,7 @@ const mediaReportMap = {
     }
 };
 function report(data) {
-    console.info("Test " + guid + (FAILED ? " failed: " : " passed:\n"), data);
+    console.info("Test " + guid + (FAILED ? " failed: " : " passed:\n"), JSON.stringify(data));
     window.result = data;
     const keys = [
         "date","tzOffset", "ip", "peerIp", "peer", "concurrency",
@@ -77,7 +77,8 @@ function report(data) {
         row.appendChild(item);
     });
     table.appendChild(row);
-    console.log('uploading', data);
+    const stringified = JSON.stringify(data);
+    console.log('uploading', stringified);
     /* This is what we would want, but we still want to gather failure results from MSIE...
     fetch("/upload", {
         method: 'post',
@@ -89,8 +90,7 @@ function report(data) {
     var xmlhttp = new XMLHttpRequest();
     xmlhttp.open("POST", "/upload");
     xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-    xmlhttp.send(JSON.stringify(data));
-    xmlhttp.addEventListener("loadend", console.log);
+    xmlhttp.send(stringified);
 }
 
 Object.keys(browserData).forEach(function (key) {
