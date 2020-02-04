@@ -5,11 +5,17 @@ const fs = require('fs');
 const express = require('express');
 const bodyParser = require('body-parser');
 const https = require('https'); // for forwarding to hifi-telemetric
+const morgan = require('morgan')
+const pseudo = require('./pseudo-request');
 
 process.title = "p2p-load-test";
 const app = express();
 const expressWs = require('express-ws')(app);
 app.set('trust proxy', true);
+const logger = morgan('common');
+pseudo.configure(logger);
+
+app.use(logger);
 app.use(express.static('public'));
 function rawBodySaver(req, res, buf, encoding) {
   if (buf && buf.length) {
@@ -20,7 +26,6 @@ app.use(bodyParser.json({verify: rawBodySaver}));
 app.use(bodyParser.urlencoded({extended: true}));
 
 app.post('/upload', function (req, res) {
-    console.log('uploaded', req.rawBody);
     var data;
     const forward = https.request("https://hifi-telemetric.herokuapp.com/gimmedata", {
         method: 'post',
@@ -33,7 +38,6 @@ app.post('/upload', function (req, res) {
             // being good XML (unless we declare the content-type).
             res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
             res.end(data);
-            console.log('responded', data);
         });
     });
     forward.on('error', e => console.error('forward', e));
@@ -70,16 +74,18 @@ function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces ope
 function listingData(req) {
     return JSON.stringify({ip: req.ip, peers: Object.keys(registrants)});
 }
+
 app.post('/message', function (req, res) {
     const clientPipe = registrants[req.body.to];
     if (!clientPipe) return res.status(404).send("Not found");
     if (req.body.type === 'listing') { // Hack special case
         req.rawBody = listingData(req);
     }
+    req.originalUrl += `?from=${req.body.from}&to=${req.body.to}`;
+    if (req.body.type) req.originalUrl += `&type=${req.body.type}`;
     const messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
     res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
     res.end(JSON.stringify({id: messageId}));
-    console.log(new Date(), `sse message ${clientPipe.sseMessageId} ${(JSON.stringify(req.body.data) || "").slice(0, 100)}...`);
 });
 
 app.get('/messages/:id', function (req, res) {
@@ -93,11 +99,13 @@ app.get('/messages/:id', function (req, res) {
     res.writeHead(200, headers);
     res.setTimeout(0); // Or we could heartbeat before the default 2 minutes.
     res.sseMessageId = 0;
+    pseudo.info(req);
 
     req.on('close', () => {
-        console.log(new Date(), 'SSE connection closed', id);
         clearInterval(heartbeat);
         delete registrants[id];
+        req.method = 'DELETE'; // For logging purposes.
+        res.end();
     });
 
     // In this application, we tell each new registrant about all existing ones.
@@ -113,14 +121,15 @@ const wsRegistrants = {};
 app.ws('/:id', function (ws, req) {
     const id = req.params.id;
     wsRegistrants[id] = ws;
+    pseudo.info(req);
     ws.on('message', function (data) {
+        pseudo.info({url: `/${id}/.websocket`, method: 'PUT'});
         const message = JSON.parse(data);
         const destination = wsRegistrants[message.to];
         if (id !== message.from) {
-            console.log(new Date(), 'WebSocket wrong origin', id, 'claimed', message.from);
+            console.error(new Date(), 'WebSocket wrong origin', id, 'claimed', message.from);
             return ws.terminate();
         }
-        console.log(new Date(), 'ws message', message.type || 'data', (destination ? 'ok' : 'missing'));
         if (!destination) return ws.terminate(); // Just close the connection, just as if client were directly connected to the destination.
         if (destination.readyState !== ws.OPEN) {
             destination.terminate();
@@ -130,8 +139,9 @@ app.ws('/:id', function (ws, req) {
         destination.send(data);
     });
     ws.on('close', function () {
-        console.log(new Date(), 'WebSocket connection closed', id);
         delete wsRegistrants[id];
+        req.method = 'DELETE'; // For logging purposes
+        pseudo.info(req);
     });
 });
 
