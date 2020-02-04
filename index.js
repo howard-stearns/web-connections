@@ -155,9 +155,9 @@ app.ws('/:id', function (ws, req) {
 });
 
 const server = app.listen(PORT);
-
-const puppeteer = require('puppeteer');
 var browser = {close: _ => Promise.resolve()};
+/*
+const puppeteer = require('puppeteer');
 async function client() {
     browser = await puppeteer.launch({headless: true});
         const page = await browser.newPage();
@@ -166,13 +166,14 @@ async function client() {
     await page.evaluate(() => window.isHeadless = true);
 }
 client();
+*/
 
-function handle(signal) {
+function shutdown(signal) {
     console.log('Received', signal);
     acceptingRegistrants = false
     server.close(_ => console.log('Closed server'));
     Object.values(registrants).forEach(res => closeRegistrant(res));
     browser.close();
 }
-process.on('SIGINT', handle);
-process.on('SIGTERM', handle);
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
