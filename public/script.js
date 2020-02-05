@@ -73,7 +73,8 @@ const testConnections = {};
 const respondingConnections = {};
 const RTC_CONFIGURATION = {
     iceServers: [
-        {urls: 'stun:ice.highfidelity.com'},
+        //{urls: 'stun:ice.highfidelity.com'},
+        {urls: "stun:stun.l.google.com:19302"}
     ]
 };
 
