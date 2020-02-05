@@ -73,8 +73,18 @@ const testConnections = {};
 const respondingConnections = {};
 const RTC_CONFIGURATION = {
     iceServers: [
-        //{urls: 'stun:ice.highfidelity.com'},
-        {urls: "stun:stun.l.google.com:19302"}
+        {urls: [
+            "stun:stun.l.google.com:19302",
+            //"stun:stun.voiparound.com",
+            //"stun:stun.voipbuster.com",
+            //"stun:stun.ideasip.com",
+            //"stun:stun.ekiga.net",
+            //"stun:stun.xten.com"
+            //"stun:ice.highfidelity.com"
+        ]},
+        {urls: 'turn:numb.viagenie.ca',
+         credential: 'muazkh',
+         username: 'webrtc@live.com'}
     ]
 };
 
