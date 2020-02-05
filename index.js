@@ -108,6 +108,10 @@ app.get('/messages/:id', function (req, res) {
         'Connection': 'keep-alive',
         'Cache-Control': 'no-cache'
     };
+    res.on('error', (err, ...args) => {
+        console.log('captured sse error', err, ...args);
+        closeRegistrant(res);
+    });
     res.writeHead(200, headers);
     res.setTimeout(0); // Or we could heartbeat before the default 2 minutes.
     res.sseMessageId = 0;
@@ -155,6 +159,17 @@ app.ws('/:id', function (ws, req) {
 });
 
 const server = app.listen(PORT);
+
+server.on('clientError', (err, socket) => {
+    console.log('captured clientError', err);
+    socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+});
+
+server.on('error', (err, ...args) => {
+    console.log('FIXME captured server error', err, ...args);
+});
+
+
 var browser = {close: _ => Promise.resolve()};
 /*
 const puppeteer = require('puppeteer');
