@@ -91,12 +91,16 @@ function updateTestingMessage() {
 
 // Answer Date.now(), but also start a timer that will reject the test if
 // the specified collector[key] has not been set before the timer goes off.
-function startSubtest(milliseconds, collector, key, reject) {
+function startSubtest(milliseconds, collector, key, reject, channel = {}) {
     setTimeout(_ => {
         if (collector[key] === undefined) {
             console.error("%s did not complete in %s ms.", key, milliseconds);
             collector[key] = FAIL_VALUE;
-            reject(key + " timeout");
+            var label = key + " timeout";
+            if (channel && (channel.readyState !== undefined)) {
+                label += ' ' + channel.readyState;
+            }
+            reject(label);
         }
     }, milliseconds);
     return Date.now();
@@ -141,14 +145,14 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
                     resolve(collector);
                 };
                 // Send a data block and expect a message back.
-                start = startSubtest(5000, collector, bandwidthKey, reject);
+                start = startSubtest(5000, collector, bandwidthKey, reject, channel);
                 send('data' + block);
             };
             // Send ping and expect a message back.
-            start = startSubtest(5000, collector, pingKey, reject);
+            start = startSubtest(5000, collector, pingKey, reject, channel);
             send('ping');
         }
-        var start = startSubtest(5000, collector, setupKey, reject);
+        var start = startSubtest(5000, collector, setupKey, reject, channel);
         if (skipSetup) channel.onopen();
     }).catch(notarizeFailure(collector, setupKey));
 }
