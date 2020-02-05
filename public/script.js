@@ -95,9 +95,8 @@ function updateTestingMessage() {
 function startSubtest(milliseconds, collector, key, reject, channel = {}) {
     setTimeout(_ => {
         if (collector[key] === undefined) {
-            console.error("%s did not complete in %s ms.", key, milliseconds);
-            collector[key] = FAIL_VALUE;
-            var label = key + " timeout";
+            const failReason = channel.failReason || FAIL_VALUE;
+            var label = channel.failReason || "timeout";
             if (channel && (channel.readyState !== undefined)) {
                 label += ' ' + channel.readyState;
             }
@@ -279,6 +278,11 @@ class TestingConnection extends CommonConnection {
     constructor(peerId) {
         super(peerId);
         this.initDataChannel(this.peer.createDataChannel(`${this.id} => ${this.peerId}`));
+    }
+    signallingError(type, from, to, response) { // Can be overriden.
+        console.error(type, from, to, response.status, response.url, response.statusText);
+        this.channel.failReason = (response.status == 404) ? "peer offline" : response.statusText;
+        return response;
     }
     testMedia() {
         const nTracksKey = 'nTracks';

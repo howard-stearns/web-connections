@@ -183,7 +183,17 @@ class EventSourceRTC extends RTCSignallingPeer {
     }
     p2pSend(type, message) {
         const body = JSON.stringify({type, from: this.id, to: this.peerId, data: message});
-        return this.poster(body);
+        return this.poster(body).then(response => response.ok ? response
+                                      : this.signallingError(type, this.id, this.peerId, response));
+    }
+    signallingError(type, from, to, response) { // Can be overriden.
+        // Handle an asynchronous communication error during signalling (e.g., from p2pSend)
+        // Note that Chrome will report 404 from fetch in the console as if by console.error, without
+        // actually signalling an error. (The spec says no error is signalled, but it doesn't prevent
+        // Chrome from being annoying noisy about it. See
+        // https://stackoverflow.com/questions/4500741/suppress-chrome-failed-to-load-resource-messages-in-console/30847631#30847631
+        console.error(type, from, to, response.status, response.url, response.statusText);
+        return response;
     }
 }
 
