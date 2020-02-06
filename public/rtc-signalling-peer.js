@@ -13,7 +13,8 @@ class RTCSignallingPeer {
         const peer = this.peer = new RTCPeerConnection(configuration);
         this.events = ['icecandidate', 'offer', 'answer'];
         peer.onnegotiationneeded = _ => this.negotiationneeded();
-        peer.onicecandidate = event => event.candidate && this.p2pSend('icecandidate', event.candidate);
+        peer.onicecandidate = event => (event.candidate && (event.candidate.candidate !== null))
+            && this.p2pSend('icecandidate', event.candidate);
         
         //peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
         //peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
