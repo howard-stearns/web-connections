@@ -17,6 +17,13 @@ var browserData = {
 }
 dummy = null;
 
+const loadStart = Date.now();
+const creditsTimer = setInterval(_ => {
+    const sinceStart = Date.now() - loadStart;
+    const accrued = (sinceStart * 1.667);
+    credits.innerHTML = Math.floor(accrued).toLocaleString(undefined, {minimumIntegerDigits: 9});
+}, 100);
+
 function uuidv4(label) { // Not crypto strong, but good enough for prototype.
     label = label || '';
     return label + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -46,10 +53,14 @@ const mediaReportMap = {
     }
 };
 function report(data) {
-    console.info("Test " + guid + (FAILED ? " failed: " : " passed:\n"), JSON.stringify(data));
+    console.info("Test " + guid + (FAILED ? " failed" : " passed"), data.peer || "");
     window.result = data;
     const keys = [
-        "date","tzOffset", "ip", "peerIp", "peer", "concurrency",
+        "date","tzOffset", "ip", "peerIp",
+        ["local-protocol", "local-candidateType", "local-address"],
+        ["remote-protocol", "remote-candidateType", "remote-address"],
+         "peer",
+        "concurrency",
         "wsSetup","wsPing","wsKbs",
         "sseSetup","ssePing","sseKbs",
         "dataSetup","dataPing","dataKbs",
@@ -61,7 +72,7 @@ function report(data) {
     const row = document.createElement('tr');
     keys.forEach(function (key) {
         const item = document.createElement('td');
-        var value = data[key];
+        var value = Array.isArray(key) ? key.map(function (k) { return data[k]; }).join(' ') : data[key];
         if (value === undefined) {
             value = '    ';
         } else if (value === FAIL_VALUE) {
@@ -107,5 +118,9 @@ agent.innerHTML = browserData.agent = navigator.userAgent;
 const now = new Date();
 browserData.date = now.toISOString();
 browserData.tzOffset = now.getTimezoneOffset();
-if (FAILED) report(browserData);
+if (FAILED) {
+    clearInterval(creditsTimer);
+    credits.innerHTML = "1";
+    report(browserData);
+}
 localStorage.setItem(ID_KEY, guid);

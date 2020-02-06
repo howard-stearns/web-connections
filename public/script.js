@@ -219,7 +219,7 @@ class CommonConnection extends EventSourceRTC { // Connection to whatever we are
         if (kill1(testConnections, 'testing')) {
             report(this.results);
         } else { // We currently do not report our end of test.
-            contribution.innerHTML = ` You have contributed to ${++contributionCount} other test${contributionCount === 1 ? '' : 's'} this session! Thank you!`;
+            served.innerHTML = ++contributionCount;
             kill1(respondingConnections, 'responding to');
         }
     }
@@ -272,15 +272,8 @@ class TestingConnection extends CommonConnection {
                                       connection.results)
             .then(_ => connection.testMedia())
             .then(_ => connection.peer.getStats())
-            .then(stats => {
-                stats.forEach(report => {
-                    const kinds = mediaReportMap[report.type];
-                    if (!kinds) return;
-                    kinds[report.kind].forEach(key => (report[key] !== undefined)
-                                               && (connection.results[[report.type, report.kind, key].join('-')] = report[key]));
-                });
-                connection.channel.onmessage = null;
-            })
+            .then(stats => connection.reportMedia(stats))
+            .then(_ => connection.channel.onmessage = null)
             .catch(e => console.log('caught', e))
             .then(_ => connection.p2pSend('close', null))
             .then(_ => connection.close());
@@ -322,6 +315,34 @@ class TestingConnection extends CommonConnection {
         })
             .then(_ => stream && (collector.mediaRuntime = Date.now() - mediaStartTime))
             .catch(notarizeFailure(collector, setupKey));
+    }
+    reportMedia(stats) {
+        var selected;
+        stats.forEach(report => {
+            if ((report.type === 'candidate-pair') && // find the selected report
+                (report.selected || (report.nominated && (report.state === 'succeeded')))) {
+                selected = report;
+                return;
+            }
+            const kinds = mediaReportMap[report.type]; // Is this a report for which we want media stats?
+            if (!kinds) { return; }
+            kinds[report.kind || report.mediaType].forEach(key => {
+                const value = report[key];
+                if (value !== undefined) {
+                    this.results[[report.type, (report.kind || report.mediaType), key].join('-')] = value;
+                }
+            });
+        });
+        stats.forEach(report => { // Find local and remote ICE candidate referenced by the selected report.
+            if (((report.type === 'local-candidate') && (report.id === selected.localCandidateId))
+                || ((report.type === 'remote-candidate') && (report.id === selected.remoteCandidateId))) {
+                const prefix = report.type.split('-')[0] + '-';
+                ['protocol', 'candidateType', 'address'].forEach(key => {
+                    const altKey = {address: 'ip'}[key];
+                    this.results[prefix + key] = (report[key] || report[altKey]);
+                });
+            }
+        });
     }
 }
 
