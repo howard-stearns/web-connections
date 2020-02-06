@@ -7,6 +7,7 @@ const bodyParser = require('body-parser');
 const https = require('https'); // for forwarding to hifi-telemetric
 const morgan = require('morgan')
 const pseudo = require('./pseudo-request');
+const pkg = require('./package.json');
 
 process.title = "p2p-load-test";
 const app = express();
@@ -76,7 +77,11 @@ function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces ope
     res.flushHeaders();    
 }
 function listingData(req) {
-    return JSON.stringify({ip: req.ip, peers: Object.keys(registrants)});
+    return JSON.stringify({
+        ip: req.ip,
+        version: pkg.version,
+        peers: Object.keys(registrants)
+    });
 }
 app.post('/message', function (req, res) {
     const clientPipe = registrants[req.body.to];
@@ -91,16 +96,18 @@ app.post('/message', function (req, res) {
     res.end(JSON.stringify({id: messageId}));
 });
 
-function closeRegistrant(res) {
+var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.
+const SHUTDOWN_RETRY_TIMEOUT_MS = 30 * 1000;
+function closeRegistrant(res, retryTimeout) {
     clearInterval(res.heartbeat);
     delete registrants[res.guid];
     res.originalRequest.method = 'DELETE'; // For logging purposes.
+    if (retryTimeout) res.write(`retry: ${retryTimeout}\n\n`);
     res.end();
 }
 
-var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.
 app.get('/messages/:id', function (req, res) {
-    if (!acceptingRegistrants) return res.status(503).send("Not Available");
+    if (!acceptingRegistrants) return closeRegistrant(res, SHUTDOWN_RETRY_TIMEOUT_MS);
     const id = req.params.id;
     // TODO: reject requests that don't accept this content-type.
     const headers = {
@@ -187,7 +194,7 @@ function shutdown(signal) {
     console.log('Received', signal);
     acceptingRegistrants = false
     server.close(_ => console.log('Closed server'));
-    Object.values(registrants).forEach(res => closeRegistrant(res));
+    Object.values(registrants).forEach(res => closeRegistrant(res, SHUTDOWN_RETRY_TIMEOUT_MS));
     browser.close();
 }
 process.on('SIGINT', shutdown);

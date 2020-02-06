@@ -24,16 +24,21 @@ function sendWebsocketMessage(data) { // Returns a promise
     return Promise.resolve(webSocket.send(JSON.stringify({to: guid, from: guid, data: data})));
 }
 
+var ourCurrentVersion;
 function initEventSource() {
     if (eventSource) return sendSelfMessage(undefined, 'listing');
 
     eventSource = new EventSource(`/messages/${guid}`);
-    eventSource.onerror = e => console.error('event source error', e);
 
     // We will immediately be given a listing of currently connected peers. Save it for later
     function listingHandler(messageEvent) {
         const message = JSON.parse(messageEvent.data);
         console.log('listingHandler', messageEvent.data);
+        if (ourCurrentVersion && (ourCurrentVersion !== message.version)) {
+            console.log('NEW VERSION', message.version);
+            location.reload();
+        }
+        ourCurrentVersion = message.version;
         // Hitting refresh can sometimes allow our guid to still be registered.
         // We need two different EventSource to test loopback, but then we'd be registered twice and things would get weird.
         existingPeers = message.peers.filter(p => p !== guid);
@@ -333,6 +338,11 @@ class TestingConnection extends CommonConnection {
                 }
             });
         });
+        if (!selected) { // If this happens, let's try to see why.
+            console.error('No selected candidate-pair report',
+                          stats.filter(r => (r.type === 'candidate-pair') && r.nominated));
+            return;
+        }
         stats.forEach(report => { // Find local and remote ICE candidate referenced by the selected report.
             if (((report.type === 'local-candidate') && (report.id === selected.localCandidateId))
                 || ((report.type === 'remote-candidate') && (report.id === selected.remoteCandidateId))) {
