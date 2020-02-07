@@ -8,6 +8,7 @@ const https = require('https'); // for forwarding to hifi-telemetric
 const morgan = require('morgan')
 const pseudo = require('./pseudo-request');
 const pkg = require('./package.json');
+const Turn = require('node-turn');
 
 process.title = "p2p-load-test";
 const app = express();
@@ -176,6 +177,14 @@ server.on('error', (err, ...args) => {
     console.log('FIXME captured server error', err, ...args);
 });
 
+const turn = new Turn({
+    authMech: 'long-term', //'none',
+    credentials: {test: 'winning'},
+    debugLevel: 'ALL'/*,
+    listeningIps: ['127.0.0.1'],
+    relayIps: ['127.0.0.1']*/
+});
+turn.start();
 
 var browser = {close: _ => Promise.resolve()};
 /*
@@ -194,6 +203,7 @@ function shutdown(signal) {
     console.log('Received', signal);
     acceptingRegistrants = false
     server.close(_ => console.log('Closed server'));
+    turn.stop();
     Object.values(registrants).forEach(res => closeRegistrant(res, SHUTDOWN_RETRY_TIMEOUT_MS));
     browser.close();
 }

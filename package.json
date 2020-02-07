@@ -17,6 +17,7 @@
         "express": "^4.17.1",
         "express-ws": "^4.0.0",
         "morgan": "^1.9.1",
+        "node-turn": "0.0.4",
         "puppeteer": "^2.0.0"
     },
     "devDependencies": {
