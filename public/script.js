@@ -325,7 +325,7 @@ class TestingConnection extends CommonConnection {
         var selected;
         stats.forEach(report => {
             if ((report.type === 'candidate-pair') && // find the selected report
-                (report.selected || (report.nominated && (report.state === 'succeeded')))) {
+                (report.selected || (report.nominated && ((report.state === 'succeeded') || report.writable)))) {
                 selected = report;
                 return;
             }
