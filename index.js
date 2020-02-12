@@ -8,7 +8,6 @@ const https = require('https'); // for forwarding to hifi-telemetric
 const morgan = require('morgan')
 const pseudo = require('./pseudo-request');
 const pkg = require('./package.json');
-const Turn = require('node-turn');
 
 process.title = "p2p-load-test";
 const app = express();
@@ -177,17 +176,21 @@ server.on('error', (err, ...args) => {
     console.log('FIXME captured server error', err, ...args);
 });
 
-const turn = new Turn({
+var turn = {stop: _ => null};
+/* // Run a TURN server. Well, not on heroku as we get one port per app
+const Turn = require('node-turn');
+turn = new Turn({
     authMech: 'long-term', //'none',
     credentials: {test: 'winning'},
-    debugLevel: 'ALL'/*,
+    debugLevel: 'ALL',
     listeningIps: ['127.0.0.1'],
-    relayIps: ['127.0.0.1']*/
+    relayIps: ['127.0.0.1']
 });
 turn.start();
+*/
 
 var browser = {close: _ => Promise.resolve()};
-/*
+/* // Run a client on the server so that there's always someone to play with. Well, not yet.
 const puppeteer = require('puppeteer');
 async function client() {
     browser = await puppeteer.launch({headless: true});
