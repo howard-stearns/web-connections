@@ -116,7 +116,7 @@ app.get('/messages/:id', function (req, res) {
         'Cache-Control': 'no-cache'
     };
     res.on('error', (err, ...args) => {
-        console.log('captured sse error', err, ...args);
+        console.error('captured sse error', err, ...args);
         closeRegistrant(res);
     });
     res.writeHead(200, headers);
@@ -124,7 +124,10 @@ app.get('/messages/:id', function (req, res) {
     res.sseMessageId = 0;
     pseudo.info(req);
 
-    req.on('close', _ => closeRegistrant(res));
+    req.on('close', _ => {
+        console.log('close', id);
+        closeRegistrant(res)
+    });
 
     // In this application, we tell each new registrant about all existing ones.
     // TODO: decide whether to do this in production. Separate method?
@@ -173,7 +176,7 @@ server.on('clientError', (err, socket) => {
 });
 
 server.on('error', (err, ...args) => {
-    console.log('FIXME captured server error', err, ...args);
+    console.error('FIXME captured server error', err, ...args);
 });
 
 var turn = {stop: _ => null};
