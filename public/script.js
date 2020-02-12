@@ -339,8 +339,13 @@ class TestingConnection extends CommonConnection {
             });
         });
         if (!selected) { // If this happens, let's try to see why.
-            console.error('No selected candidate-pair report',
-                          stats.filter(r => (r.type === 'candidate-pair') && r.nominated));
+            const pairs = [];
+            stats.forEach(r => {  // stats doesn't have .filter() on Edge
+                if ((r.type === 'candidate-pair') && r.nominated) {
+                    pairs.push(r);
+                }
+            });
+            console.error('No selected candidate-pair report', pairs);
             return;
         }
         stats.forEach(report => { // Find local and remote ICE candidate referenced by the selected report.
