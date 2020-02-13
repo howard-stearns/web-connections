@@ -113,13 +113,10 @@ app.get('/messages/:id', function (req, res) {
     const headers = {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'X-Accel-Buffering', 'no'
+        'X-Accel-Buffering': 'no'
     };
     if (req.httpVersion !== '2.0') {
         res.setHeader('Connection', 'keep-alive');
-    }
-    if (this.options.isCompressed) {
-        res.setHeader('Content-Encoding', 'deflate');
     }
     res.on('error', (err, ...args) => {
         console.error('captured sse error', err, ...args);
