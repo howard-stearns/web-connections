@@ -112,15 +112,23 @@ app.get('/messages/:id', function (req, res) {
     // TODO: reject requests that don't accept this content-type.
     const headers = {
         'Content-Type': 'text/event-stream',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache'
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering', 'no'
     };
+    if (req.httpVersion !== '2.0') {
+        res.setHeader('Connection', 'keep-alive');
+    }
+    if (this.options.isCompressed) {
+        res.setHeader('Content-Encoding', 'deflate');
+    }
     res.on('error', (err, ...args) => {
         console.error('captured sse error', err, ...args);
         closeRegistrant(res);
     });
-    res.writeHead(200, headers);
+    req.socket.setNoDelay(true);
+    req.socket.setKeepAlive(true);
     res.setTimeout(0); // Or we could heartbeat before the default 2 minutes.
+    res.writeHead(200, headers);
     res.sseMessageId = 0;
     pseudo.info(req);
 
