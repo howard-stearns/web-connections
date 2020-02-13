@@ -1,9 +1,5 @@
 "use strict";
 
-// Applications can be designed to fail appropriately at runtime in browsers that don't support stuff.
-// But it is really hard to do so when stuff fails to load.
-var RTCPeerConnection = window.RTCPeerConnection || ReferenceError;
-
 // Base class for signalling and resignalling of RTCPeerConnection.
 // Subclasses (below) are specialized for different kinds of signalling message carriers, and illustrate what must be provided.
 class RTCSignallingPeer {
