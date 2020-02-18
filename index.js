@@ -80,7 +80,7 @@ function listingData(req) {
     return JSON.stringify({
         ip: req.ip,
         version: pkg.version,
-        peers: Object.keys(registrants)
+        peers: Object.keys(registrants).filter(guid => guid.length === 36) // Filter in case we have "temp" guids for dual roles
     });
 }
 app.post('/message', function (req, res) {

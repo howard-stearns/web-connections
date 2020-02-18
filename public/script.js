@@ -195,15 +195,16 @@ function obtainMediaStream(browserHasMedia, collector, key) {
 
 var contributionCount = 0;
 class CommonConnection extends EventSourceRTC { // Connection to whatever we are testing with. Two subclasses, below.
-    constructor(peerId) {
-        super(eventSource, guid, peerId, RTC_CONFIGURATION);
+    constructor(peerId, signalling = eventSource, ourId = guid) {
+        super(signalling, ourId, peerId, RTC_CONFIGURATION);
         this.closeMessageHandler =  messageEvent => {
             // Either end can close, by sending a message. We use the signalling channel because
             // there no completely supported way to tell if an RTCPeerConnection or RTCDataChannel
             // has been closed.
             this.close();
         };
-        eventSource.addEventListener('close', this.closeMessageHandler);
+        this.signalling = signalling;
+        signalling.addEventListener('close', this.closeMessageHandler);
     }
     initDataChannel(channel) {
         this.channel = channel;
@@ -220,7 +221,8 @@ class CommonConnection extends EventSourceRTC { // Connection to whatever we are
             }
         }
         super.close();
-        eventSource.removeEventListener('close', this.closeMessageHandler);
+        this.signalling.removeEventListener('close', this.closeMessageHandler);
+        delete this.signalling;
         if (kill1(testConnections, 'testing')) {
             report(this.results);
         } else { // We currently do not report our end of test.
@@ -267,6 +269,8 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
     }
 }
 
+var testSSE;
+var testGUID = 'T' + guid;
 class TestingConnection extends CommonConnection {
     static run(peerId) {
         const connection = testConnections[peerId] = new TestingConnection(peerId);
@@ -284,7 +288,7 @@ class TestingConnection extends CommonConnection {
             .then(_ => connection.close());
     }
     constructor(peerId) {
-        super(peerId);
+        super(peerId, testSSE, testGUID);
         this.initDataChannel(this.peer.createDataChannel(`${this.id} => ${this.peerId}`));
     }
     signallingError(type, from, to, response) { // Can be overriden.
@@ -364,6 +368,7 @@ class TestingConnection extends CommonConnection {
 function doAllTests() {
     retest.disabled = true;
     if (FAILED) return console.error("Missing required functionality.");
+    testSSE = new EventSource(`/messages/${testGUID}`);
     obtainMediaStream(browserData.av, browserData, 'mediaSetup') // Just once...
         .then(media => stream = media) // ... and shared among each RTCPeerConnection
         .then(updateTestingMessage)
@@ -381,6 +386,8 @@ function doAllTests() {
                 + " <b>please leave this page up</b> so that other people can test with you at higher concurrency."
                 + " (No futher webcam or audio data will be used, however.)";
             retest.disabled = false;
+            testSSE.close();
+            testSSE = null;
         })
 }
 window.onload = doAllTests;
