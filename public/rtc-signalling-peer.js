@@ -9,8 +9,18 @@ class RTCSignallingPeer {
         const peer = this.peer = new RTCPeerConnection(configuration);
         this.events = ['icecandidate', 'offer', 'answer'];
         peer.onnegotiationneeded = _ => this.negotiationneeded();
-        peer.onicecandidate = event => (event.candidate && (event.candidate.candidate !== null))
+        // The spec says that a null candidate should not be sent, but that an empty string candidate should.
+        // But Safari gets errors from empty candidate string.
+        peer.onicecandidate = event => event.candidate && event.candidate.candidate
             && this.p2pSend('icecandidate', event.candidate);
+        // Support unknown. Can be overridden, of course.
+        peer.onicecandidateerror = event => {
+            // STUN errors are in the range 300-699. See RFC 5389, section 15.6
+            // for a list of codes. TURN adds a few more error codes; see
+            // RFC 5766, section 15 for details.
+            // Server could not be reached are in the range 700-799.
+            console.error('ice code:', event.errorCode, event);
+        };
         
         //peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
         //peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
@@ -25,7 +35,7 @@ class RTCSignallingPeer {
     }
     icecandidate(iceCandidate) { // We have been signalled by the other end about a new candidate.
         this.peer.addIceCandidate(iceCandidate)
-            .catch(e => setTimeout(_ => alert('CONNECTION ADD ICE FAILED', this.id, e.name, e.message), 0));
+            .catch(e => setTimeout(_ => alert(`CONNECTION ADD ICE FAILED id: ${this.id}, candidate: ${iceCandidate.candidate}, error: ${e.name}: ${e.message}`), 0));
     }
     // When we add a stream or channel, or conditions change, we get this event to (re)start the signalling process.
     negotiationneeded() {
