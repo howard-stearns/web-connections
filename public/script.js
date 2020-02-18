@@ -9,7 +9,11 @@ function initWebSocket() {
     webSocket = new WebSocket(`${wsSite}/${guid}`);
 }
 
-function sendSelfMessage(data, type) { // Returns a promise
+function sendWebsocketMessage(data) { // Returns a promise
+    return Promise.resolve(webSocket.send(JSON.stringify({to: guid, from: guid, data: data})));
+}
+
+function sendSseMessage(data, type) { // Returns a promise
     const message = {to: guid, from: guid};
     if (data !== undefined) message.data = data;
     if (type !== undefined) message.type = type;
@@ -20,13 +24,9 @@ function sendSelfMessage(data, type) { // Returns a promise
     });
 }
 
-function sendWebsocketMessage(data) { // Returns a promise
-    return Promise.resolve(webSocket.send(JSON.stringify({to: guid, from: guid, data: data})));
-}
-
 var ourCurrentVersion;
 function initEventSource() {
-    if (eventSource) return sendSelfMessage(undefined, 'listing');
+    if (eventSource) return sendSseMessage(undefined, 'listing');
 
     eventSource = new EventSource(`/messages/${guid}`);
 
@@ -379,7 +379,7 @@ function doAllTests() {
         .then(_ => testSetupPingBandwidth('ws', webSocket, sendWebsocketMessage, browserData))
         .then(_ => webSocket.close())
         .then(initEventSource)
-        .then(reinited => testSetupPingBandwidth('sse', eventSource, sendSelfMessage, browserData, !!reinited))
+        .then(reinited => testSetupPingBandwidth('sse', eventSource, sendSseMessage, browserData, !!reinited))
         .then(_ => Promise.all(existingPeers.map(TestingConnection.run)))
         .then(results => {
             stream && stream.getTracks().forEach(track => track.stop());
