@@ -365,8 +365,11 @@ class TestingConnection extends CommonConnection {
     }
 }
 
+const RETEST_INTERVAL_MS = 30 * 60 * 1000; // Every half hour
+var retestTimer;
 function doAllTests() {
     retest.disabled = true;
+    clearTimeout(retestTimer);
     if (FAILED) return console.error("Missing required functionality.");
     testSSE = new EventSource(`/messages/${testGUID}`);
     obtainMediaStream(browserData.av, browserData, 'mediaSetup') // Just once...
@@ -381,10 +384,12 @@ function doAllTests() {
         .then(results => {
             stream && stream.getTracks().forEach(track => track.stop());
             console.info(`Completed ${results.length} peer tests.`);
+            retestTimer = setTimeout(doAllTests, RETEST_INTERVAL_MS);
             if (!results.length) report(browserData);
             userMessages.innerHTML = "Testing is complete. If you can,"
-                + " <b>please leave this page up</b> so that other people can test with you at higher concurrency."
-                + " (No futher webcam or audio data will be used, however.)";
+                + " <b>please leave this page up</b> so that we can automaticall retest periodically,"
+                + " and so other people can test with you at higher concurrency."
+                + " Next test scheduled for " + new Date(Date.now() + RETEST_INTERVAL_MS);
             retest.disabled = false;
             testSSE.close();
             testSSE = null;
