@@ -67,14 +67,24 @@ function sendSSE(res, data, type = '') {
     // TODO: In production, we'll want send and keep track of message ids so that a reconnecting client can resync.
     if (type) res.write(`event: ${type}\n`); // Must be first if present
     const messageId = res.sseMessageId++;
-    res.write(`data: ${data}\n`);
+    if (data) res.write(`data: ${data}\n`);
     res.write(`id: ${messageId}\n\n`); // Conventionally last, so that count isn't incremented until data is sent.
     res.flushHeaders();
     return messageId;
 }
+const HEARTBEAT_IS_PING_PONG = true;
 function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces open event on other end
-    res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
-    res.flushHeaders();    
+    if (HEARTBEAT_IS_PING_PONG) {
+        if (res.gotPong === false) { // undefined doesn't count
+            console.info(`${new Date()}: No pong from ${res.guid} (${res.gotPong}), closing.`);
+            return closeRegistrant(res); // We didn't get a pong from last ping. Kill 'em.
+        }
+        res.gotPong = false;
+        sendSSE(res, HEROKU_PROXY_TIMEOUT_MS, 'ping');
+    } else {
+        res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
+        res.flushHeaders();
+    }
 }
 function listingData(req) {
     return JSON.stringify({
@@ -85,13 +95,19 @@ function listingData(req) {
 }
 app.post('/message', function (req, res) {
     const clientPipe = registrants[req.body.to];
+    var messageId = 0;
     if (!clientPipe) return res.status(404).send("Not found");
     if (req.body.type === 'listing') { // Hack special case
         req.rawBody = listingData(req);
     }
     req.originalUrl += `?from=${req.body.from}&to=${req.body.to}`;
     if (req.body.type) req.originalUrl += `&type=${req.body.type}`;
-    const messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
+    if (req.body.type === 'pong') { // Another special case
+        if (req.body.from !== req.body.to) return res.status(403).send("Forbidden from ponging someone else.");
+        clientPipe.gotPong = true; // And don't sendSSE
+    } else {
+        messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
+    }
     res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
     res.end(JSON.stringify({id: messageId}));
 });
@@ -127,10 +143,12 @@ app.get('/messages/:id', function (req, res) {
     res.setTimeout(0); // Or we could heartbeat before the default 2 minutes.
     res.writeHead(200, headers);
     res.sseMessageId = 0;
+    res.guid = id;
+    res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
+    res.originalRequest = req; // For logging when it closes.
     pseudo.info(req);
 
     req.on('close', _ => {
-        console.log('close', id);
         closeRegistrant(res)
     });
 
@@ -138,9 +156,6 @@ app.get('/messages/:id', function (req, res) {
     // TODO: decide whether to do this in production. Separate method?
     // Note that, for now, we do not broadcast new registrants to existing ones. No need.
     sendSSE(res, listingData(req), 'listing');
-    res.guid = id;
-    res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
-    res.originalRequest = req; // For logging when it closes.
     registrants[id] = res;
 });
 const HEROKU_PROXY_TIMEOUT_MS = 10 * 1000;

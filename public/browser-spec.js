@@ -14,7 +14,13 @@ function debug(...args) {
 
 const CONFIGURATION = {
     iceServers: [
-        {urls: 'stun:ice.highfidelity.com'},
+        //{urls: 'stun:ice.highfidelity.com'},
+        {urls: [
+            "stun:stun.l.google.com:19302",
+        ]},
+        {urls: 'turn:numb.viagenie.ca',
+         credential: 'muazkh',
+         username: 'webrtc@live.com'}
     ]
 };
 

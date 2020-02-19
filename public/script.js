@@ -24,11 +24,23 @@ function sendSseMessage(data, type) { // Returns a promise
     });
 }
 
-var ourCurrentVersion;
+var ourCurrentVersion, pingTimer;
+const PING_TIMEOUT_MS = 15 * 1000;
 function initEventSource() {
     if (eventSource) return sendSseMessage(undefined, 'listing');
 
     eventSource = new EventSource(`/messages/${guid}`);
+
+    function pingPong(messageEvent) {
+        clearTimeout(pingTimer);
+        pingTimer = setTimeout(_ => {
+            console.warn('No SSE ping from server.');
+            closeEventSource();
+            setTimeout(initEventSource, 3000);
+        }, PING_TIMEOUT_MS);
+        sendSseMessage(undefined, 'pong').catch(console.log);
+    }
+    eventSource.addEventListener('ping', pingPong);
 
     // We will immediately be given a listing of currently connected peers. Save it for later
     function listingHandler(messageEvent) {
@@ -59,11 +71,15 @@ function initEventSource() {
     eventSource.addEventListener('offer', peerEventHandler);
 
     // Server will timeout the connection, but a reload produce confusing results unless we play nice.
-    window.addEventListener('beforeunload', event => {
+    function closeEventSource() {
+        clearTimeout(pingTimer);
+        eventSource.removeEventListener('ping', pingPong); 
         eventSource.removeEventListener('listing', listingHandler);
         eventSource.removeEventListener('offer', peerEventHandler);
-        eventSource.close()
-    });
+        eventSource.close();
+        eventSource = null;
+    }
+    window.addEventListener('beforeunload', closeEventSource);
 }
 
 
