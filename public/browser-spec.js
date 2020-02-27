@@ -138,9 +138,19 @@ describe('browser side', function () {
                         (new peerClass(idB, idA)).then(b => rtcB = b)
                     ]).then(done);
                 });
-                afterEach(function () {
-                    rtcA.close();
-                    rtcB.close();
+                afterEach(function (done) {
+                    // Kludge alert! Supicious choices!
+                    // The delay here is because messages "in flight" at the time of closing - particularly a flood of icecandidates -
+                    // will cause a bunch of harmless logspam when we attempt to delive them at the other end if it's already closed.
+                    // It won't fail the tests, but I'd like to be able to say that any logspam at all in these tests should be
+                    // investigated. Alas, I don't know that there's any single correct minimal time to wait on all computers, so we don't
+                    // know about problems until such investigation until we dig in. Maybe more worrisome, is that having such a delay
+                    // might mask a real problem. (But maybe we should design a specific test for that with a hard fail?)
+                    setTimeout(_ => {
+                        rtcA.close();
+                        rtcB.close();
+                        done();
+                    }, 150);
                 });
                 var label = "foo", payload = "ping";
                 describe('lock', function () {
@@ -281,7 +291,7 @@ describe('browser side', function () {
                     describe('glare situations', function () {
                         // These work on Firefox - but not Chrome or Safari - using the techniques from
                         // https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
-                        // Instead, we make them work everywhere (FIXME!) using the acquireLock technique.
+                        // Instead, we make them work everywhere using the acquireLock technique.
                         it('can create data channels from both sides', function (done) {
                             const label2 = "bar", payload2 = "baz"
                             Promise.all([
@@ -369,8 +379,6 @@ describe('browser side', function () {
                                         const thisStream = event.streams[0],
                                               theseTracks = thisStream.getTracks();
                                         expect(thisStream.id).toBe(stream.id);
-                                        stream.getTracks().forEach((track, index) => 
-                                                                   expect(track.kind).toBe(theseTracks[index].kind));
                                         if (--nTracks <= 0) resolve();
                                     };
                                     rtcA.peer.ontrack = event => fail("got track on sender");
@@ -381,18 +389,17 @@ describe('browser side', function () {
                             const stream2 = stream.clone();
                             var n1 = stream.getTracks().length, n2 = stream2.getTracks().length;
                             Promise.all([
-                                new Promise(resolve => rtcA.peer.ontrack = e => {console.log('got track @ A'); if (--n2 <= 0) resolve(e);}),
-                                new Promise(resolve => rtcB.peer.ontrack = e => {console.log('got track @ B'); if (--n1 <= 0) resolve(e);}),
+                                new Promise(resolve => rtcA.peer.ontrack = e => {if (--n2 <= 0) resolve(e);}),
+                                new Promise(resolve => rtcB.peer.ontrack = e => {if (--n1 <= 0) resolve(e);}),
                                 rtcA.addStream(stream),
                                 rtcB.addStream(stream2)
                             ]).then(events => {
-                                console.log('promises complete');
                                 expect(events[0].streams[0].id).toBe(stream2.id);
                                 expect(events[1].streams[0].id).toBe(stream.id);
                                 stream2.getTracks().forEach(track => track.stop());
-                                setTimeout(_ => {console.log('done'); done();}, 1000);
+                                done();
                             });
-                        }, 10 * 1000);
+                        });
                         it('can send data and media', function (done) {
                             Promise.all([
                                 new Promise(resolve => {
