@@ -31,302 +31,397 @@ describe('browser side', function () {
     beforeAll(function (done) { // Give puppeteer a chance to hook into reporters.
         setTimeout(_ => done(), 1000);
     });
-    describe('event source', function () {        
-        var eventSource, eventHandler, secondSource;
-        var target = uuidv4('sse-target-'), source = uuidv4('sse-source-'), type = 'foo';        
-        beforeAll(function (done) { // Wait for open before starting tests.
-            eventSource = new EventSource(`/messages/${target}`);
-            eventSource.onopen = done;
-        });
-        afterEach(function () {
-            eventSource.onmessage = null;
-        });
-        afterAll(function () {
-            eventSource.close();
-            secondSource.close();
-        });
-        function sendMessage(payload, type = '', to = target, from = source) {
-            const body = {
-                to: to,
-                from: from,
-                data: payload
-            };
-            if (type) body.type = type;
-            return fetch('/message', {
-                method: 'post',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body)
+    var idA, idB;
+    beforeEach(function () {
+        idA = uuidv4('A');
+        idB = uuidv4('B');
+    });
+    describe('p2pDispatch', function () {
+        function makeDispatchSuite(dispatcherClass) {
+            describe(dispatcherClass.name, function () {
+                var dispatcherA, dispatcherB, receiverA = {}, receiverB = {}, events = ['foo', 'bar'];
+                beforeEach(function (done) { // Wait for open before starting tests.
+                    Promise.all([
+                        (new dispatcherClass(idA, receiverA, events)).then(a => dispatcherA = a),
+                        (new dispatcherClass(idB, receiverB, events)).then(b => dispatcherB = b)
+                    ]).then(done);
+                });
+                afterEach(function () {
+                    dispatcherA.close();
+                    dispatcherB.close();
+                });
+                it('sends to self', function (done) {
+                    const type = events[0], payload = 'payload'
+                    receiverB[type] = data => {
+                        expect(data).toBe(payload);
+                        done();
+                    };
+                    dispatcherB.p2pSend(idB, type, payload);
+                });
+                it('send to other ids', function (done) {
+                    const type = events[0], payload = 'payload'
+                    receiverB[type] = data => {
+                        expect(data).toBe(payload);
+                        done();
+                    };
+                    dispatcherA.p2pSend(idB, type, payload);
+                });
+                it('delivers in order', function (done) {
+                    var payloads = ['a', 'b', 'c', 'd', 'e', 'f'],
+                        received = 0,
+                        type = events[0];
+                    receiverB[type] = data => {
+                        expect(data).toBe(payloads[received++]);
+                        if (received >= payloads.length) done();
+                    };
+                    payloads.forEach(p => dispatcherA.p2pSend(idB, type, p));
+                });
+                it('distinguishes by type', function (done) {
+                    var payloadForFoo = 'payload 1', payloadForBar = 'payload 2';
+                    Promise.all([
+                        new Promise(resolve => { receiverB[events[0]] = resolve; }),
+                        new Promise(resolve => { receiverB[events[1]] = resolve; })
+                    ]).then(([answerA, answerB]) => {
+                        expect(answerA).toBe(payloadForFoo);
+                        expect(answerB).toBe(payloadForBar);
+                        done();
+                    });
+                    dispatcherB.p2pSend(idB, events[0], payloadForFoo);
+                    dispatcherB.p2pSend(idB, events[1], payloadForBar);
+                });
+                it('distinguishes by id', function (done) {
+                    var payloadForA = 'payload 1', payloadForB = 'payload 2', type = events[0];
+                    Promise.all([
+                        new Promise(resolve => { receiverA[type] = resolve; }),
+                        new Promise(resolve => { receiverB[type] = resolve; })
+                    ]).then(([answerA, answerB]) => {
+                        expect(answerA).toBe(payloadForA);
+                        expect(answerB).toBe(payloadForB);
+                        done();
+                    });
+                    dispatcherA.p2pSend(idB, type, payloadForB);
+                    dispatcherB.p2pSend(idA, type, payloadForA);
+                });
+                it('leaves nothing behind', function (done) {
+                    const receiver = {};
+                    new dispatcherClass(idA, receiver, events).then(dispatcher => {
+                        const connection = dispatcher.connection;
+                        dispatcher.close();
+                        expect(dispatcher.connection).toBeFalsy();
+                        if (connection) {
+                            expect(connection.onopen).toBe(null);
+                            expect(connection.onclose).toBeFalsy(); // Doesn't ever exist on EventSource.
+                            expect(connection.onerror).toBe(null);
+                            // Alas, no way to confirm that any addEventListener's have been removed.
+                            expect(connection.onmessage).toBe(null);
+                            expect(connection.onerror).toBe(null);
+                            expect(connection.readyState).toBeGreaterThanOrEqual(2); // WebSocket could be closing or closed
+                        }
+                        expect(Object.keys(receiver).length).toBe(0);
+                        done();
+                    });
+                });
             });
         }
-        it('loops back messages', function (done) {
-            const payload = 'payload1';
-            eventSource.onmessage = event => {
-                const message = JSON.parse(event.data);
-                expect(message.data).toBe(payload);
-                expect(message.from).toBe(source);
-                done();
-            };
-            sendMessage(payload);
-        });
-        it('loops back events', function (done) {
-            const payload = 'payload2';
-            eventSource.onmessage = event => {
-                fail(`Message delivered: '${event.data}'`);
-            };
-            eventSource.addEventListener(type, event => {
-                const message = JSON.parse(event.data);
-                expect(message.data).toBe(payload);
-                expect(message.from).toBe(source);
-                expect(event.type).toBe(type);
-                done();
-            }, {once: true});
-            sendMessage(payload, type);
-        });
-        it('delivers in order', function (done) {
-            var payloads = ['a', 'b', 'c', 'd', 'e', 'f'],
-                received = 0,
-                serialSend = serializePromises(sendMessage);
-            eventSource.onmessage = event => {
-                const message = JSON.parse(event.data);
-                expect(message.data).toBe(payloads[received++]);
-                if (received >= payloads.length) done();
-            };
-            payloads.forEach(p => serialSend(p));
-        });
-        it('distinguishes by id', function (done) {
-            const secondId = uuidv4('sse-second-');
-            const second = secondSource = new EventSource(`/messages/${secondId}`);
-            second.onopen = _ => {
-                Promise.all([
-                    new Promise(resolve => {
-                        second.onmessage = event => {
-                            expect(JSON.parse(event.data).data).toBe('for2');
-                            resolve();
-                        };
-                    }),
-                    new Promise(resolve => {
-                        eventSource.onmessage = event => {
-                            expect(JSON.parse(event.data).data).toBe('for1');
-                            resolve();
-                        };
-                    })
-                ]).then(done);
-                sendMessage('for1', null, target, secondId)
-                sendMessage('for2', null, secondId, target)
-            };
-        });
+        makeDispatchSuite(LoopbackDispatch);
+        makeDispatchSuite(RandomDelayLoopbackDispatch);
+        makeDispatchSuite(WebSocketDispatch);
+        makeDispatchSuite(EventSourceDispatch);
     });
-    describe('web socket', function () {
-        var wsA, wsB, a = uuidv4('wsA-'), b = uuidv4('wsB-');
-        beforeAll(function (done) { // Wait for open before starting tests.
-            wsA = new WebSocket(`${wsSite}/${a}`);
-            wsA.onopen = _ => {
-                wsB = new WebSocket(`${wsSite}/${b}`);
-                wsB.onopen = done;
-            };
-        });
-        afterEach(function () {
-            wsA.onmessage = wsB.onmessage = null;
-        });
-        afterAll(function () {
-            wsA.close();
-            wsB.close();
-        });
-        function sendMessage(payload, to, from, type = '') {
-            const data = {from: from, to: to, data: payload};
-            if (type) data.type = type;
-            ((from === a) ? wsA : wsB).send(JSON.stringify(data));
-        }
-        it('loops back messages', function (done) {
-            const payload = 'payload1';
-            wsB.onmessage = event => {
-                const message = JSON.parse(event.data);
-                expect(message.data).toBe(payload);
-                expect(message.from).toBe(a);
-                done();
-            };
-            sendMessage(payload, b, a);
-        });
-        it('delivers in order', function (done) {
-            var payloads = ['a', 'b', 'c', 'd', 'e', 'f'], received = 0;
-            wsB.onmessage = event => {
-                const message = JSON.parse(event.data);
-                expect(message.data).toBe(payloads[received++]);
-                if (received >= payloads.length) done();
-            };
-            payloads.forEach(p => sendMessage(p, b, a));
-        });
-        it('distinguishes by id', function (done) {
-            Promise.all([
-                new Promise(resolve => {
-                    wsB.onmessage = event => {
-                        const message = JSON.parse(event.data);
-                        expect(message.data).toBe('for2');
-                        expect(message.type).toBe('y');
-                        expect(message.from).toBe(a);
-                        resolve();
-                    };
-                }),
-                new Promise(resolve => {
-                    wsA.onmessage = event => {
-                        const message = JSON.parse(event.data);
-                        expect(message.data).toBe('for1');
-                        expect(message.type).toBe('x');
-                        expect(message.from).toBe(b);
-                        resolve();
-                    };
-                })
-            ]).then(done);
-            sendMessage('for1', a, b, 'x');
-            sendMessage('for2', b, a, 'y');
-        });
-    });
-    
-    describe('data stream signalling', function () {
-        var connection1, connection2;
-        var pipe1, pipe2;
-        const id1 = uuidv4('data-1-');
-        const id2 = uuidv4('data-2-');
-        afterEach(function (done) {
-            setTimeout(_ => {
-                [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
-                done();
-            }, 500);
-        });
-        function testDataStreams(thunks, peerClass, done) {
-            function run(done) {
-                const setupLabel = peerClass.name + ' data channel open';
-                const pingLabel = peerClass.name + ' data ping roundtrip';
-                connection1 = new peerClass(pipe1, id1, id2, CONFIGURATION);
-                connection2 = new peerClass(pipe2, id2, id1, CONFIGURATION);
-                connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
-                connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
-                connection2.peer.ondatachannel = event => {
-                    const channel2 = event.channel;
-                    console.log('channel2 got data channel');
-                    channel2.onerror = e => debug('fixme channel2 error', e);
-                    channel2.onopen = _ => console.log('fixme channel2 open');
-                    channel2.onmessage = event => {
-                        console.log('channel2 got', event.data);
-                        expect(event.data).toBe('ping');
-                        channel2.send('pong');
-                    };
-                };
-                console.time(setupLabel);
-                const channel1 = connection1.peer.createDataChannel('1:2', null);
-                channel1.onopen = _ => {
-                    console.timeEnd(setupLabel);
-                    console.time(pingLabel)
-                    channel1.send('ping');
-                };
-                channel1.onmessage = event => {
-                    console.timeEnd(pingLabel);
-                    console.log('channel1 got', event.data);
-                    expect(event.data).toBe('pong');
-                    console.log(peerClass.name, 'data finished');
-                    done();
-                };
-                channel1.onerror = e => debug('fixme channel1 error', e);
-            }
-            return function (done) {
-                console.log('start data', peerClass.name);
-                if (thunks) {
-                    pipe1 = thunks[0]();
-                    pipe1.onopen = _ => {
-                        pipe2 = thunks[1]();
-                        pipe2.onopen = _ => run(done);
+    describe('signaling', function () {
+        function makeSignalingSuite(peerClass) {
+            describe(peerClass.name, function () {
+                var rtcA, rtcB;
+                beforeEach(function (done) {
+                    Promise.all([ // Wait for open before starting tests.
+                        (new peerClass(idA, idB)).then(a => rtcA = a),
+                        (new peerClass(idB, idA)).then(b => rtcB = b)
+                    ]).then(done);
+                });
+                afterEach(function () {
+                    rtcA.close();
+                    rtcB.close();
+                });
+                var label = "foo", payload = "ping";
+                describe('lock', function () {
+                    const pauseMs = 1000;
+                    async function waits() {
+                        await new Promise(resolve => setTimeout(resolve, pauseMs));
+                        return 1;
                     }
-                } else {
-                    run(done);
-                }
-            };
-        }
-        it('loopback', testDataStreams(null, LoopbackRTC));
-        it('web socket', testDataStreams([_ => new WebSocket(`${wsSite}/${id1}`),
-                                          _ => new WebSocket(`${wsSite}/${id2}`)],
-                                         WebSocketRTC));
-        it('event stream', testDataStreams([_ => new EventSource(`/messages/${id1}`),
-                                            _ => new EventSource(`/messages/${id2}`)],
-                                           EventSourceRTC));
-
-    });
-    describe('media stream signalling', function () {
-        var connection1, connection2;
-        var pipe1, pipe2;
-        const id1 = uuidv4('media-1');
-        const id2 = uuidv4('media-2');
-        afterEach(function (done) {
-            setTimeout(_ => {
-                [connection1.peer, connection2.peer, pipe1, pipe2].forEach(o => o && o.close());
-                done();
-            }, 500);
-        });
-        function testMediaStreams(thunks, peerClass, done) {
-            function run(done) {
-                if (!(('mediaDevices' in navigator) &&
-                      ('getUserMedia' in navigator.mediaDevices))) {
-                    return done();
-                }
-                navigator.mediaDevices
-                    .getUserMedia({video: true, audio: true})
-                    .then(stream => {
-                        if (!stream) return fail('No media stream');
-                        const setupLabel = peerClass.name + ' media channel open';
-                        const tracks = {};
-                        var trackCount = 2;
-                        connection1 = new peerClass(pipe1, id1, id2, CONFIGURATION);
-                        connection2 = new peerClass(pipe2, id2, id1, CONFIGURATION);
-                        connection1.peer.onclose = _ => console.log(connection1.id, 'closed');
-                        connection2.peer.onclose = _ => console.log(connection1.id, 'closed');
-                        function checkConnected() {
-                            // Some browsers (firefox) don't define connectionState nor fire connectionstatechange.
-                            if (['connected', undefined].includes(connection1.peer.connectionState)
-                                && ['connected', undefined].includes(connection2.peer.connectionState)
-                                && !trackCount) {
-                                console.log(peerClass.name, 'media finished');
+                    function resolves() {
+                        return new Promise(resolve => setTimeout(_ => {
+                            resolve(1);
+                        }, pauseMs));
+                    }
+                    function rejects() {
+                        return new Promise((_, reject) => setTimeout(_ => {
+                            reject(99);
+                        }, pauseMs));
+                    }
+                    describe('acquire and releases', function () {
+                        it('with waiting', function (done) {
+                            rtcA.acquireLock(waits).then(x => {
+                                expect(x).toBe(1);
                                 done();
-                            }
+                            });
+                        });
+                        it('with resolution', function (done) {
+                            rtcA.acquireLock(resolves).then(x => {
+                                expect(x).toBe(1);
+                                done();
+                            });
+                        });
+                        it('with rejection', function (done) {
+                            rtcA.acquireLock(rejects).then(x => {
+                                expect(x).toBeFalsy();
+                                done();
+                            });
+                        });
+                        it('times out', function (done) {
+                            rtcA.acquireLock(resolves, 500).then(x => {
+                                expect(x).toBeFalsy();
+                                done();
+                            });
+                        });
+                    });
+                    describe('queues in order', function () {
+                        function testQueueing(connectionA, connectionB, done) {
+                            var executingA = false, executingB = false;
+                            Promise.all([
+                                connectionA.acquireLock(async _ => {
+                                    var x;
+                                    executingA = true;
+                                    expect(executingB).toBeFalsy();
+                                    x = await waits();
+                                    expect(x).toBe(1);
+                                    executingA = false;
+                                    expect(executingB).toBeFalsy();
+                                    return 'a';
+                                }),
+                                connectionB.acquireLock(_ => {
+                                    executingB = true;
+                                    expect(executingA).toBeFalsy();
+                                    return resolves().then(x => {
+                                        expect(x).toBe(1);
+                                        executingB = false;
+                                        expect(executingA).toBeFalsy();
+                                        return 'b';
+
+                                    });
+                                })
+                            ]).then(([a, b]) => {
+                                expect(a).toBe('a');
+                                expect(b).toBe('b');
+                                done();
+                            });
                         }
-                        connection1.peer.onconnectionstatechange = checkConnected;
-                        connection2.peer.onconnectionstatechange = checkConnected;
-                        
-                        connection2.peer.addEventListener('track', event => {
-                            const track = event.track,
-                                  trackId = event.streams[0].id;
-                            expect(trackId).toBe(tracks[track.kind]);
-                            if (--trackCount <= 0) {
-                                console.timeEnd(setupLabel);
-                                checkConnected();
-                            }
+                        it('orders on same side', function (done) {
+                            testQueueing(rtcA, rtcA, done);
+                        });
+                        it('orders on other side', function (done) {
+                            testQueueing(rtcA, rtcB, done);
+                        });
+                    });
+                });
+                describe('negotiation', function () {
+                    describe('data', function () {
+                        it('can send data on open', function (done) {
+                            rtcB.peer.ondatachannel = event => {
+                                const bChannel = event.channel;
+                                expect(bChannel.label).toBe(label);
+                                bChannel.onmessage = messageEvent => {
+                                    expect(messageEvent.data).toBe(payload);
+                                    done();
+                                };
+                            };
+                            rtcA.createDataChannel(label).then(aChannel => {
+                                expect(aChannel.label).toBe(label);
+                                aChannel.send(payload);
+                            });
+                        });
+                        it('can send data on channel', function (done) {
+                            rtcB.peer.ondatachannel = event => {
+                                const bChannel = event.channel;
+                                // Note that the spec says that on 'datachannel', the
+                                // channel might not actually be open. And indeed, on
+                                // Safari, it isn't. One must wait for 'open'.
+                                bChannel.onopen = _ => bChannel.send(payload);
+                                expect(bChannel.label).toBe(label);
+                            };
+                            rtcA.createDataChannel(label).then(aChannel => {
+                                aChannel.onmessage = messageEvent => {
+                                    expect(aChannel.label).toBe(label);
+                                    expect(messageEvent.data).toBe(payload);
+                                    done();
+                                };
+                            });
+                        });
+                        it('can send through two data channels on open', function (done) {
+                            const label2 = "bar", payload2 = "baz";
+                            var nMessages = 2;
+                            rtcB.peer.ondatachannel = event => {
+                                const bChannel = event.channel;
+                                bChannel.onmessage = messageEvent => {
+                                    const thisPayload = (bChannel.label === label2) ? payload2 : payload;
+                                    expect(messageEvent.data).toBe(thisPayload);
+                                    if (--nMessages === 0) done();
+                                };
+                            };
+                            rtcA.createDataChannel(label).then(aChannel1 => {
+                                expect(aChannel1.label).toBe(label);
+                                aChannel1.send(payload);
+                            });
+                            rtcA.createDataChannel(label2).then(aChannel2 => {
+                                expect(aChannel2.label).toBe(label2);
+                                aChannel2.send(payload2);
+                            });
+                        });
+                    });
+                    describe('glare situations', function () {
+                        // These work on Firefox - but not Chrome or Safari - using the techniques from
+                        // https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
+                        // Instead, we make them work everywhere (FIXME!) using the acquireLock technique.
+                        it('can create data channels from both sides', function (done) {
+                            const label2 = "bar", payload2 = "baz"
+                            Promise.all([
+                                new Promise(resolve => {
+                                    rtcA.peer.ondatachannel = event => {
+                                        const aChannel = event.channel;
+                                        expect(aChannel.label).toBe(label2);
+                                        aChannel.onmessage = messageEvent => {
+                                            expect(messageEvent.data).toBe(payload2);
+                                            resolve();
+                                        };
+                                    };
+                                }),
+                                new Promise(resolve => {
+                                    rtcB.peer.ondatachannel = event => {
+                                        const bChannel = event.channel;
+                                        expect(bChannel.label).toBe(label);
+                                        bChannel.onmessage = messageEvent => {
+                                            expect(messageEvent.data).toBe(payload);
+                                            resolve();
+                                        };
+                                    };
+                                })
+                            ]).then(done);
+                            rtcA.createDataChannel(label).then(aChannel => {
+                                expect(aChannel.label).toBe(label);
+                                aChannel.send(payload);
+                            });
+                            rtcB.createDataChannel(label2).then(bChannel => {
+                                expect(bChannel.label).toBe(label2);
+                                bChannel.send(payload2);
+                            });
                         });
 
-                        console.time(setupLabel);
-                        stream.getTracks().forEach(track => {
-                            tracks[track.kind] = stream.id; // Stream id is same at both ends. Track id is not.
-                            connection1.peer.addTrack(track, stream);
+                        it('can prearrange data', function (done) {
+                            const opts = {negotiated: true, id: 12}, payload2 = "pong";
+                            Promise.all([
+                                rtcA.createDataChannel(label, opts),
+                                rtcB.createDataChannel(label, opts)
+                            ]).then(([aChannel, bChannel]) => {
+                                expect(aChannel.label).toBe(label);
+                                expect(aChannel.id).toBe(opts.id);
+                                expect(bChannel.label).toBe(label);
+                                expect(bChannel.id).toBe(opts.id);
+                                return Promise.all([
+                                    new Promise(resolve => {
+                                        aChannel.onmessage = event => resolve(event.data);
+                                        aChannel.send(payload);
+                                    }),
+                                    new Promise(resolve => {
+                                        bChannel.onmessage = event => resolve(event.data);
+                                        bChannel.send(payload2);
+                                    })
+                                ]);
+                            }).then(([aResult, bResult]) => {
+                                expect(aResult).toBe(payload2);
+                                expect(bResult).toBe(payload);
+                                done();
+                            });
                         });
-                    },
-                          error => { debug(error); done();});
-            }
-            return function (done) {
-                console.log('start media', peerClass.name);
-                if (thunks) {
-                    pipe1 = thunks[0]();
-                    pipe1.onopen = _ => {
-                        pipe2 = thunks[1]();
-                        pipe2.onopen = _ => run(done);
-                    }
-                } else {
-                    run(done);
-                }
-            };
+                    });
+                    describe('media', function () {
+                        var stream, masterStream;
+                        beforeAll(function (done) {
+                            navigator.mediaDevices
+                                .getUserMedia({video: true, audio: true})
+                                .then(mediaStream => masterStream = mediaStream)
+                                .then(done);
+                        });
+                        beforeEach(function () {
+                            stream = masterStream.clone();
+                        });
+                        afterEach(function () {
+                            stream.getTracks().forEach(track => track.stop());
+                        });
+                        afterAll(function () {
+                            masterStream.getTracks().forEach(track => track.stop());
+                        });
+                        it('can send media', function (done) {
+                            var nTracks = stream.getTracks().length;
+                            Promise.all([
+                                rtcA.addStream(stream),
+                                new Promise(resolve => {
+                                    rtcB.peer.ontrack = event => {
+                                        const thisStream = event.streams[0],
+                                              theseTracks = thisStream.getTracks();
+                                        expect(thisStream.id).toBe(stream.id);
+                                        stream.getTracks().forEach((track, index) => 
+                                                                   expect(track.kind).toBe(theseTracks[index].kind));
+                                        if (--nTracks <= 0) resolve();
+                                    };
+                                    rtcA.peer.ontrack = event => fail("got track on sender");
+                                })
+                            ]).then(_ => setTimeout(done, 0));
+                        });
+                        it('can send media in both directions', function (done) {
+                            const stream2 = stream.clone();
+                            var n1 = stream.getTracks().length, n2 = stream2.getTracks().length;
+                            Promise.all([
+                                new Promise(resolve => rtcA.peer.ontrack = e => {console.log('got track @ A'); if (--n2 <= 0) resolve(e);}),
+                                new Promise(resolve => rtcB.peer.ontrack = e => {console.log('got track @ B'); if (--n1 <= 0) resolve(e);}),
+                                rtcA.addStream(stream),
+                                rtcB.addStream(stream2)
+                            ]).then(events => {
+                                console.log('promises complete');
+                                expect(events[0].streams[0].id).toBe(stream2.id);
+                                expect(events[1].streams[0].id).toBe(stream.id);
+                                stream2.getTracks().forEach(track => track.stop());
+                                setTimeout(_ => {console.log('done'); done();}, 1000);
+                            });
+                        }, 10 * 1000);
+                        it('can send data and media', function (done) {
+                            Promise.all([
+                                new Promise(resolve => {
+                                    rtcB.peer.ondatachannel = event => {
+                                        const bChannel = event.channel;
+                                        expect(bChannel.label).toBe(label);
+                                        bChannel.onmessage = messageEvent => {
+                                            expect(messageEvent.data).toBe(payload);
+                                            resolve();
+                                        };
+                                    };
+                                }),
+                                new Promise(resolve => {
+                                    rtcB.peer.ontrack = resolve;
+                                }),
+                                rtcA.createDataChannel(label).then(aChannel => {
+                                    expect(aChannel.label).toBe(label);
+                                    aChannel.send(payload);
+                                }),
+                                rtcA.addStream(stream)
+                            ]).then(done);
+                        });
+                    });
+                });
+            });
         }
-        it('loopback', testMediaStreams(null, LoopbackRTC));
-        it('web socket', testMediaStreams([_ => new WebSocket(`${wsSite}/${id1}`),
-                                           _ => new WebSocket(`${wsSite}/${id2}`)],
-                                          WebSocketRTC));
-        it('event stream', testMediaStreams([_ => new EventSource(`/messages/${id1}`),
-                                             _ => new EventSource(`/messages/${id2}`)],
-                                            EventSourceRTC));
+        makeSignalingSuite(LoopbackRTC);
+        makeSignalingSuite(RandomDelayLoopbackRTC);        
+        makeSignalingSuite(WebSocketRTC);
+        makeSignalingSuite(EventSourceRTC);
     });
 });
