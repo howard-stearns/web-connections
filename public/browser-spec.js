@@ -33,7 +33,7 @@ describe('browser side', function () {
     });
     var idA, idB;
     beforeEach(function () {
-        idA = uuidv4('A');
+        idA = uuidv4(Math.random() < 0.5 ? 'A' : 'C'); // One is "polite" relatibe to idB, the other not.
         idB = uuidv4('B');
     });
     describe('p2pDispatch', function () {
@@ -146,11 +146,12 @@ describe('browser side', function () {
                     // investigated. Alas, I don't know that there's any single correct minimal time to wait on all computers, so we don't
                     // know about problems until such investigation until we dig in. Maybe more worrisome, is that having such a delay
                     // might mask a real problem. (But maybe we should design a specific test for that with a hard fail?)
+                    const DONE_TO_CLOSE_INTERVAL_MS = 175; // Must be >= RandomDelayLoopbackDispatch.MaxDelayMS.
                     setTimeout(_ => {
                         rtcA.close();
                         rtcB.close();
                         done();
-                    }, 150);
+                    }, DONE_TO_CLOSE_INTERVAL_MS);
                 });
                 var label = "foo", payload = "ping";
                 describe('lock', function () {
