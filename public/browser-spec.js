@@ -39,8 +39,10 @@ describe('browser side', function () {
     describe('p2pDispatch', function () {
         function makeDispatchSuite(dispatcherClass) {
             describe(dispatcherClass.name, function () {
-                var dispatcherA, dispatcherB, receiverA = {}, receiverB = {}, events = ['foo', 'bar'];
+                var dispatcherA, dispatcherB, receiverA, receiverB, events = ['foo', 'bar'];
                 beforeEach(function (done) { // Wait for open before starting tests.
+                    receiverA = {peerId: idB};
+                    receiverB = {peerId: idA};
                     Promise.all([
                         (new dispatcherClass(idA, receiverA, events)).then(a => dispatcherA = a),
                         (new dispatcherClass(idB, receiverB, events)).then(b => dispatcherB = b)
@@ -89,7 +91,7 @@ describe('browser side', function () {
                     dispatcherB.p2pSend(idB, events[0], payloadForFoo);
                     dispatcherB.p2pSend(idB, events[1], payloadForBar);
                 });
-                it('distinguishes by id', function (done) {
+                it('distinguishes by to', function (done) {
                     var payloadForA = 'payload 1', payloadForB = 'payload 2', type = events[0];
                     Promise.all([
                         new Promise(resolve => { receiverA[type] = resolve; }),
@@ -102,24 +104,45 @@ describe('browser side', function () {
                     dispatcherA.p2pSend(idB, type, payloadForB);
                     dispatcherB.p2pSend(idA, type, payloadForA);
                 });
-                it('leaves nothing behind', function (done) {
-                    const receiver = {};
-                    new dispatcherClass(idA, receiver, events).then(dispatcher => {
-                        const connection = dispatcher.connection;
-                        dispatcher.close();
-                        expect(dispatcher.connection).toBeFalsy();
+                it('distinguishes by from', function (done) {
+                    var payloadFromX = 'payload 1', payloadFromB = 'payload 2', type = events[0];
+                    var idX = uuidv4('X'), receiverAX = {peerId: idX};
+                    Promise.all([
+                        new dispatcherClass(idA, receiverAX, events),
+                        new dispatcherClass(idX, {peerId: idA}, events)
+                    ]).then(([dispatcherAX, dispatcherXA]) => {
+                        Promise.all([
+                            new Promise(resolve => { receiverA[type] = resolve; }),
+                            new Promise(resolve => { receiverAX[type] = resolve; })
+                        ]).then(([answerB, answerX]) => {
+                            expect(answerB).toBe(payloadFromB);
+                            expect(answerX).toBe(payloadFromX);
+                            dispatcherXA.close();
+                            dispatcherAX.close();                        
+                            done();
+                        });
+                        dispatcherXA.p2pSend(idA, type, payloadFromX);
+                        dispatcherB.p2pSend(idA, type, payloadFromB);
+                    });
+                });
+                it('leaves nothing behind (and close can be called more than once)', function (done) {
+                    //const receiver = {};
+                    //new dispatcherClass(idA, receiver, events).then(dispatcher => {
+                        const connection = dispatcherA.connection;
+                    dispatcherA.close();
+                        expect(dispatcherA.connection).toBeFalsy();
                         if (connection) {
                             expect(connection.onopen).toBe(null);
                             expect(connection.onclose).toBeFalsy(); // Doesn't ever exist on EventSource.
                             expect(connection.onerror).toBe(null);
                             // Alas, no way to confirm that any addEventListener's have been removed.
                             expect(connection.onmessage).toBe(null);
-                            expect(connection.onerror).toBe(null);
+                            // If no failures, then there should not be anything holding the connection open.
                             expect(connection.readyState).toBeGreaterThanOrEqual(2); // WebSocket could be closing or closed
                         }
-                        expect(Object.keys(receiver).length).toBe(0);
+                        expect(Object.keys(receiverA).length).toBe(1); // peerId
                         done();
-                    });
+                    //});
                 });
             });
         }
@@ -146,6 +169,8 @@ describe('browser side', function () {
                     // investigated. Alas, I don't know that there's any single correct minimal time to wait on all computers, so we don't
                     // know about problems until such investigation until we dig in. Maybe more worrisome, is that having such a delay
                     // might mask a real problem. (But maybe we should design a specific test for that with a hard fail?)
+                    // The most challenging case I've found so far was commit 72c31a7774083d276ee548dd780f8720541aee7e
+                    // with seed 23367 in FF and Safari. (E.g., http://localhost:8443/SpecRunner.html?seed=23367)
                     const DONE_TO_CLOSE_INTERVAL_MS = 175; // Must be >= RandomDelayLoopbackDispatch.MaxDelayMS.
                     setTimeout(_ => {
                         rtcA.close();
