@@ -53,7 +53,8 @@ describe('browser side', function () {
                     dispatcherB.close();
                 });
                 it('sends to self', function (done) {
-                    const type = events[0], payload = 'payload'
+                    const type = events[0], payload = 'payload';
+                    receiverB.peerId = idB; // Enables sending to self.
                     receiverB[type] = data => {
                         expect(data).toBe(payload);
                         done();
@@ -88,8 +89,8 @@ describe('browser side', function () {
                         expect(answerB).toBe(payloadForBar);
                         done();
                     });
-                    dispatcherB.p2pSend(idB, events[0], payloadForFoo);
-                    dispatcherB.p2pSend(idB, events[1], payloadForBar);
+                    dispatcherA.p2pSend(idB, events[0], payloadForFoo);
+                    dispatcherA.p2pSend(idB, events[1], payloadForBar);
                 });
                 it('distinguishes by to', function (done) {
                     var payloadForA = 'payload 1', payloadForB = 'payload 2', type = events[0];

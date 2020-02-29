@@ -47,12 +47,11 @@ class P2pDispatch {
         // to dispatch to an application-constructed typed event such that the handler would be called with
         // an event that has a data property.
 
-        const id = this.id, peer = this.receiver.peerId, from = messageObject.from, to = messageObject.to;
         // Note that dipatching to your own id will deliver at every dispatcher with that id!
         // It would not work to have the semantics be that 'from' is really a concatnation of both peer ids, because
         // you could have multiple rtc instances (multiple receivers) between a given pair.
-        if ((from !== peer) && (from !== id)) return // normal. Next line would indicate a bug, though.
-        if (to !== id) return console.warn(`${messageObject.type} to ${messageObject.to} received at ${this.id}`);
+        if ((messageObject.from !== this.receiver.peerId)) return // normal. Next line would indicate a bug, though.
+        if (messageObject.to !== this.id) return console.warn(`${messageObject.type} to ${messageObject.to} received at ${this.id}`);
         this.receiver[messageObject.type](messageObject.data);
     }
     // Not every subclass connection has a close event that we can attach to for doing cleanup. So instead, clients should
