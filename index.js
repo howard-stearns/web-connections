@@ -63,11 +63,11 @@ III. In between, we multiplex at the server. Messages from any client to you app
 */
 
 const registrants = {};
-function sendSSE(res, data, type = '') {
+function sendSSE(res, string, type = '') {
     // TODO: In production, we'll want send and keep track of message ids so that a reconnecting client can resync.
     if (type) res.write(`event: ${type}\n`); // Must be first if present
     const messageId = res.sseMessageId++;
-    if (data) res.write(`data: ${data}\n`);
+    if (string) res.write(`data: ${string}\n`);
     res.write(`id: ${messageId}\n\n`); // Conventionally last, so that count isn't incremented until data is sent.
     res.flushHeaders();
     return messageId;
@@ -80,25 +80,26 @@ function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces ope
             return closeRegistrant(res); // We didn't get a pong from last ping. Kill 'em.
         }
         res.gotPong = false;
-        sendSSE(res, HEROKU_PROXY_TIMEOUT_MS, 'ping');
+        sendSSE(res, `{"type":"ping","to":${res.guid},"from":${res.guid},"data":${HEROKU_PROXY_TIMEOUT_MS}}`, 'ping');
     } else {
         res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
         res.flushHeaders();
     }
 }
 function listingData(req) {
-    return JSON.stringify({
+    return {
         ip: req.ip,
         version: pkg.version,
         peers: Object.keys(registrants).filter(guid => guid.length === 36) // Filter in case we have "temp" guids for dual roles
-    });
+    };
 }
 app.post('/message', function (req, res) {
     const clientPipe = registrants[req.body.to];
     var messageId = 0;
     if (!clientPipe) return res.status(404).send("Not found");
     if (req.body.type === 'listing') { // Hack special case
-        req.rawBody = listingData(req);
+        req.body.data = listingData(req);
+        req.rawBody = JSON.stringify(req.body);
     }
     req.originalUrl += `?from=${req.body.from}&to=${req.body.to}`;
     if (req.body.type) req.originalUrl += `&type=${req.body.type}`;
@@ -155,7 +156,7 @@ app.get('/messages/:id', function (req, res) {
     // In this application, we tell each new registrant about all existing ones.
     // TODO: decide whether to do this in production. Separate method?
     // Note that, for now, we do not broadcast new registrants to existing ones. No need.
-    sendSSE(res, listingData(req), 'listing');
+    sendSSE(res, JSON.stringify({from: id, to: id, data: listingData(req), type: 'listing'}), 'listing');
     registrants[id] = res;
 });
 const HEROKU_PROXY_TIMEOUT_MS = 10 * 1000;
