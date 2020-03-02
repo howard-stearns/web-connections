@@ -17,7 +17,6 @@ function initEventSource() {
         homeLine = null;
     }
     function ping(data) {
-        console.log('got ping, sending pong');
         clearTimeout(pingTimer);
         pingTimer = setTimeout(_ => {
             console.warn('No SSE ping from server.');
@@ -28,7 +27,6 @@ function initEventSource() {
     }
     // We will immediately be given a listing of currently connected peers. Save it for later
     function listing(data) {
-        console.log('fixme listing', data);
         if (ourCurrentVersion && (ourCurrentVersion !== data.version)) {
             console.log('NEW VERSION', data.version);
             location.reload();
@@ -43,7 +41,6 @@ function initEventSource() {
     }
     // We will now be reported to others, so respond if they start to connect to us.
     function lockRequest(data, message) {
-        console.log('fixme lockRequest', message);
         // This could be a renegotiation of something that already has it's own connection.
         if (RespondingConnection.existingInstance(message.from)) return;
         // Create a responder and let it act on the offer.
@@ -273,7 +270,6 @@ class TestingConnection extends CommonConnection {
             var tracksReceived = 0;
             if (!stream) return resolve(); // obtainMediaStream already recorded whatever needs recording
             this.channel.onmessage = event => {
-                //console.log('fixme got data channel message', event.data);
                 if (!['audio', 'video'].includes(event.data)) {
                     return console.error("Unexpected video message %s from %s", event.data, this.peerId);
                 }
@@ -285,8 +281,7 @@ class TestingConnection extends CommonConnection {
             };
             // Now start the video
             collector[nTracksKey] = stream.getTracks().length;
-            //console.log('fixme adding stream', stream);
-            this.addStream(stream)//.then(_ => console.log('fixme added stream', stream));
+            this.addStream(stream)
             var start = startSubtest(5000, collector, setupKey, reject);
         })
             .then(_ => stream && (collector.mediaRuntime = Date.now() - mediaStartTime))

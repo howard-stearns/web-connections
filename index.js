@@ -80,7 +80,7 @@ function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces ope
             return closeRegistrant(res); // We didn't get a pong from last ping. Kill 'em.
         }
         res.gotPong = false;
-        sendSSE(res, `{"type":"ping","to":${res.guid},"from":${res.guid},"data":${HEROKU_PROXY_TIMEOUT_MS}}`, 'ping');
+        sendSSE(res, JSON.stringify({type:'ping', to:res.guid, from:res.guid, data:HEROKU_PROXY_TIMEOUT_MS}), 'ping');
     } else {
         res.write(comment ? ':' + comment + '\n\n' : ':\n\n');
         res.flushHeaders();
