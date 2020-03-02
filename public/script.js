@@ -5,33 +5,19 @@
 
 // Communications:
 
-function initWebSocket() {
-    webSocket = new WebSocket(`${wsSite}/${guid}`);
-}
 
-function sendWebsocketMessage(data) { // Returns a promise
-    return Promise.resolve(webSocket.send(JSON.stringify({to: guid, from: guid, data: data})));
-}
-
-function sendSseMessage(data, type) { // Returns a promise
-    const message = {to: guid, from: guid};
-    if (data !== undefined) message.data = data;
-    if (type !== undefined) message.type = type;
-    return fetch('/message', {
-        method: 'post',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(message)
-    });
-}
-
-var ourCurrentVersion, pingTimer;
+var ourCurrentVersion, pingTimer, homeLine;
+function sendSseMessage(data, type) { return homeLine.p2pSend(guid, type, data); }
 const PING_TIMEOUT_MS = 15 * 1000;
 function initEventSource() {
-    if (eventSource) return sendSseMessage(undefined, 'listing');
-
-    eventSource = new EventSource(`/messages/${guid}`);
-
-    function pingPong(messageEvent) {
+    // Server will timeout the connection, but a reload produce confusing results unless we play nice.
+    function closeEventSource() {
+        clearTimeout(pingTimer);
+        homeLine.close();
+        homeLine = null;
+    }
+    function ping(data) {
+        console.log('got ping, sending pong');
         clearTimeout(pingTimer);
         pingTimer = setTimeout(_ => {
             console.warn('No SSE ping from server.');
@@ -40,46 +26,33 @@ function initEventSource() {
         }, PING_TIMEOUT_MS);
         sendSseMessage(undefined, 'pong').catch(console.log);
     }
-    eventSource.addEventListener('ping', pingPong);
-
     // We will immediately be given a listing of currently connected peers. Save it for later
-    function listingHandler(messageEvent) {
-        const message = JSON.parse(messageEvent.data);
-        console.log('listingHandler', messageEvent.data);
-        if (ourCurrentVersion && (ourCurrentVersion !== message.version)) {
-            console.log('NEW VERSION', message.version);
+    function listing(data) {
+        console.log('fixme listing', data);
+        if (ourCurrentVersion && (ourCurrentVersion !== data.version)) {
+            console.log('NEW VERSION', data.version);
             location.reload();
         }
-        ourCurrentVersion = message.version;
+        ourCurrentVersion = data.version;
         // Hitting refresh can sometimes allow our guid to still be registered.
         // We need two different EventSource to test loopback, but then we'd be registered twice and things would get weird.
-        existingPeers = message.peers.filter(p => p !== guid);
+        existingPeers = data.peers.filter(p => p !== guid);
         browserData.concurrency = existingPeers.length;
-        browserData.ip = message.ip;
+        browserData.ip = data.ip;
         updateTestingMessage();
     }
-    eventSource.addEventListener('listing', listingHandler);
-
     // We will now be reported to others, so respond if they start to connect to us.
-    function peerEventHandler(messageEvent) {
-        const message = JSON.parse(messageEvent.data);
+    function lockRequest(data, message) {
+        console.log('fixme lockRequest', message);
         // This could be a renegotiation of something that already has it's own connection.
-        if (respondingConnections[message.from]) return;
+        if (RespondingConnection.existingInstance(message.from)) return;
         // Create a responder and let it act on the offer.
-        respondingConnections[message.from] = new RespondingConnection(message);
+        return new RespondingConnection(message);
     }
-    eventSource.addEventListener('offer', peerEventHandler);
-
-    // Server will timeout the connection, but a reload produce confusing results unless we play nice.
-    function closeEventSource() {
-        clearTimeout(pingTimer);
-        eventSource.removeEventListener('ping', pingPong); 
-        eventSource.removeEventListener('listing', listingHandler);
-        eventSource.removeEventListener('offer', peerEventHandler);
-        eventSource.close();
-        eventSource = null;
-    }
+    if (homeLine) return sendSseMessage(undefined, 'listing').then(_ => [homeLine, true]);
     window.addEventListener('beforeunload', closeEventSource);
+    return new EventSourceDispatch(guid, {ping, listing, lockRequest}, ['ping', 'listing', 'lockRequest'], false)
+        .then(d => [homeLine = d, false]);
 }
 
 
@@ -87,11 +60,7 @@ function initEventSource() {
 
 var block = '', blockSize = 1<<15; // 32k 1-byte chracters (UTF-8)
 for (var i = 0; i < blockSize; i++) { block += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i % 26]; }
-const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
-const wsSite = protocol + "//" + location.host;
-var eventSource, existingPeers = [], stream, webSocket;
-const testConnections = {};
-const respondingConnections = {};
+var existingPeers = [], stream;
 const RTC_CONFIGURATION = {
     iceServers: [
         {urls: [
@@ -146,7 +115,7 @@ function notarizeFailure(collector, key) {
 }
 
 // Returns a promise resolving to collector with results of setup, ping and bandwidth noted.
-// We're relying on each "channel" having and onopen and onmessage.
+// We're relying on each kind of "channel" having and onopen and onmessage.
 function testSetupPingBandwidth(label, channel, send, collector, skipSetup = false) {
     const setupKey = label + 'Setup';
     const pingKey = label + 'Ping';
@@ -184,7 +153,7 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
             send('ping');
         }
         var start = startSubtest(5000, collector, setupKey, reject, channel);
-        if (skipSetup) channel.onopen();
+        if (skipSetup) channel.onopen(); // FIXME: we need to set onopen before creating channel
     }).catch(notarizeFailure(collector, setupKey));
 }
 
@@ -211,101 +180,84 @@ function obtainMediaStream(browserHasMedia, collector, key) {
 
 var contributionCount = 0;
 class CommonConnection extends EventSourceRTC { // Connection to whatever we are testing with. Two subclasses, below.
-    constructor(peerId, signalling = eventSource, ourId = guid) {
-        super(signalling, ourId, peerId, RTC_CONFIGURATION);
-        this.closeMessageHandler =  messageEvent => {
-            // Either end can close, by sending a message. We use the signalling channel because
-            // there no completely supported way to tell if an RTCPeerConnection or RTCDataChannel
-            // has been closed.
-            this.close();
-        };
-        this.signalling = signalling;
-        signalling.addEventListener('close', this.closeMessageHandler);
+    constructor(peerId, ourId = guid) {
+        return super(ourId, peerId, RTC_CONFIGURATION);
     }
     initDataChannel(channel) {
         this.channel = channel;
         channel.onerror = e => console.error(e); // Alas, not widely supported.
     }
-    close() {
-        const kill1 = (dictionary, label) => {
-            const peerId = this.peerId;
-            const connection = dictionary[peerId];
-            if (connection) {
-                delete dictionary[peerId];
-                console.info('Finished', label, peerId);
-                return true;
-            }
-        }
-        super.close();
-        this.signalling.removeEventListener('close', this.closeMessageHandler);
-        delete this.signalling;
-        if (kill1(testConnections, 'testing')) {
-            report(this.results);
-        } else { // We currently do not report our end of test.
-            served.innerHTML = ++contributionCount;
-            kill1(respondingConnections, 'responding to');
-        }
-    }
 }
+
 class RespondingConnection extends CommonConnection { // If someone is starting a test with us, this is how we respond.
+    static existingInstance(id) {
+        return this.instances[id];
+    }
     // Our event source received an unhandled message from someone who has started signalling with us.
     constructor(message) {
-        super(message.from);
-        console.info('Starting response to', this.peerId);
-        this.trackHandler = event => this.channel && this.channel.send(event.track.kind);
-        this.peer.addEventListener('track', this.trackHandler);
-        this.peer.ondatachannel = event => {
-            console.log('Got data channel for', this.peerId);
-            const channel = event.channel;
-            this.initDataChannel(channel);
-            channel.onmessage = event => {
-                const message = event.data,
-                      key = message.slice(0, 4);
-                console.log('Got', key, 'from', this.peerId);
-                switch (key) {
-                case 'ping':
-                    // Server should not send other people's data, but the peer can.
-                    channel.send(browserData.ip);
-                    break;
-                case 'data':
-                    channel.send(message);
-                    break;
-                default:
-                    console.error('Unrecognized data', message, 'from', this.peerId);
-                }
+        super(message.from).then(that => {
+            console.info('Starting response to', that.peerId);
+            that.constructor.instances[that.peerId] = that; // Keep track for existingInstance.
+            that.trackHandler = event => that.channel && that.channel.send(event.track.kind);
+            that.peer.addEventListener('track', that.trackHandler);
+            that.peer.ondatachannel = event => {
+                console.log('Got data channel for', that.peerId);
+                const channel = event.channel;
+                that.initDataChannel(channel);
+                channel.onmessage = event => {
+                    const message = event.data,
+                          key = message.slice(0, 4);
+                    console.log('Got', key, 'from', that.peerId);
+                    switch (key) {
+                    case 'ping':
+                        // Server should not send other people's data, but the peer can.
+                        channel.send(browserData.ip);
+                        break;
+                    case 'data':
+                        channel.send(message);
+                        break;
+                    default:
+                        console.error('Unrecognized data', message, 'from', that.peerId);
+                    }
+                };
             };
-        };
-        this[message.type](message.data); // And now act on whatever triggered our creation (e.g., offer).
+            that[message.type](message.data); // And now act on whatever triggered our creation (e.g., offer).
+            return that;
+        });
     }
     close() {
-        super.close();
         this.peer && this.peer.removeEventListener('track', this.trackHandler);
         this.peer && (this.peer.ondatachannel = null);
         this.channel && (this.channel.onmessage = null);
+        delete this.constructor.instances[this.peerId];
+        served.innerHTML = ++contributionCount;
+        super.close();
     }
 }
+RespondingConnection.events = RTCSignallingPeer.events.concat('close');
+RespondingConnection.instances = {};
 
 var testSSE;
 var testGUID = 'T' + guid;
 class TestingConnection extends CommonConnection {
     static run(peerId) {
-        const connection = testConnections[peerId] = new TestingConnection(peerId);
-        var mediaStartTime;
-        connection.results = Object.assign({peer: peerId}, browserData);
-        return testSetupPingBandwidth('data', connection.channel,
-                                      data => connection.channel.send(data),
-                                      connection.results)
-            .then(_ => connection.testMedia())
-            .then(_ => connection.peer.getStats())
-            .then(stats => connection.reportMedia(stats))
-            .then(_ => connection.channel.onmessage = null)
-            .catch(e => console.log('caught', e))
-            .then(_ => connection.p2pSend('close', null))
-            .then(_ => connection.close());
-    }
-    constructor(peerId) {
-        super(peerId, testSSE, testGUID);
-        this.initDataChannel(this.peer.createDataChannel(`${this.id} => ${this.peerId}`));
+        return new TestingConnection(peerId, testGUID).then(connection => {
+            var mediaStartTime;
+            connection.results = Object.assign({peer: peerId}, browserData);
+            return connection.createDataChannel(`${connection.id} => ${connection.peerId}`, {}, false)
+                .then(c => connection.initDataChannel(c))
+                .then(_ => testSetupPingBandwidth('data', connection.channel,
+                                                  data => connection.channel.send(data),
+                                                  connection.results))
+                .then(_ => connection.testMedia())
+                .then(_ => connection.peer.getStats())
+                .then(stats => connection.reportMedia(stats))
+                .then(_ => connection.channel.onmessage = null)
+                .catch(e => console.log('caught', e))
+                .then(_ => connection.p2pSend('close')) // Explicitly tell the RespondingConnection to go away
+                .then(_ => connection.close())
+                .then(_ => report(connection.results));
+        });
     }
     signallingError(type, from, to, response) { // Can be overriden.
         console.error(type, from, to, response.status, response.url, response.statusText);
@@ -317,11 +269,11 @@ class TestingConnection extends CommonConnection {
         const setupKey = 'mediaSetup';
         const collector = this.results;
         var mediaStartTime
-        collector[nTracksKey] = 0;
         return new Promise((resolve, reject) => {
             var tracksReceived = 0;
             if (!stream) return resolve(); // obtainMediaStream already recorded whatever needs recording
             this.channel.onmessage = event => {
+                //console.log('fixme got data channel message', event.data);
                 if (!['audio', 'video'].includes(event.data)) {
                     return console.error("Unexpected video message %s from %s", event.data, this.peerId);
                 }
@@ -332,11 +284,10 @@ class TestingConnection extends CommonConnection {
                 setTimeout(_ => resolve(collector), MEDIA_RUNTIME_SECONDS * 1000); // Get 10 seconds of audio to collect stats on
             };
             // Now start the video
+            collector[nTracksKey] = stream.getTracks().length;
+            //console.log('fixme adding stream', stream);
+            this.addStream(stream)//.then(_ => console.log('fixme added stream', stream));
             var start = startSubtest(5000, collector, setupKey, reject);
-            stream.getTracks().forEach(track => {
-                this.peer.addTrack(track, stream);
-                collector[nTracksKey]++;
-            });
         })
             .then(_ => stream && (collector.mediaRuntime = Date.now() - mediaStartTime))
             .catch(notarizeFailure(collector, setupKey));
@@ -387,16 +338,25 @@ function doAllTests() {
     retest.disabled = true;
     clearTimeout(retestTimer);
     if (FAILED) return console.error("Missing required functionality.");
-    testSSE = new EventSource(`/messages/${testGUID}`);
     obtainMediaStream(browserData.av, browserData, 'mediaSetup') // Just once...
         .then(media => stream = media) // ... and shared among each RTCPeerConnection
         .then(updateTestingMessage)
-        .then(initWebSocket)
-        .then(_ => testSetupPingBandwidth('ws', webSocket, sendWebsocketMessage, browserData))
-        .then(_ => webSocket.close())
+    
+        .then(_ => new WebSocketDispatch(guid, {}, [], false))
+        .then(wsDispatcher => 
+            testSetupPingBandwidth('ws', wsDispatcher.connection,
+                                   data => wsDispatcher.p2pSend(guid, undefined, data),
+                                   browserData)
+              .then(_ => wsDispatcher))
+        .then(wsDispatcher => wsDispatcher.close())
+    
         .then(initEventSource)
-        .then(reinited => testSetupPingBandwidth('sse', eventSource, sendSseMessage, browserData, !!reinited))
+        .then(([dispatcher, reinited]) => testSetupPingBandwidth('sse', dispatcher.connection,
+                                                                 sendSseMessage, browserData,
+                                                                 !!reinited))
+    
         .then(_ => Promise.all(existingPeers.map(TestingConnection.run)))
+    
         .then(results => {
             stream && stream.getTracks().forEach(track => track.stop());
             console.info(`Completed ${results.length} peer tests.`);
@@ -407,9 +367,8 @@ function doAllTests() {
                 + " and so other people can test with you at higher concurrency."
                 + " Next test scheduled for " + new Date(Date.now() + RETEST_INTERVAL_MS);
             retest.disabled = false;
-            testSSE.close();
-            testSSE = null;
         })
+
 }
 window.onload = doAllTests;
 
