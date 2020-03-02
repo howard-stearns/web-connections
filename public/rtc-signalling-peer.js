@@ -243,7 +243,13 @@ class EventSourceDispatch extends P2pDispatch {
         if (!this.connection) return;
         super.close();
         this.eventTypes.forEach(type => this.connection.removeEventListener(type, this.onmessage));
-        this.connection.close();
+
+        const dispatchers = this.constructor.peers[this.id];
+        dispatchers.splice(dispatchers.indexOf(this.connection), 1);
+        if (!dispatchers.length) {
+            delete this.constructor.peers[this.id];
+            this.connection.close();
+        }
         this.connection = null;
     }
 }
