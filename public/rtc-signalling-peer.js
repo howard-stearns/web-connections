@@ -50,9 +50,11 @@ class P2pDispatch {
         // Note that dipatching to your own id will deliver at every dispatcher with that id!
         // It would not work to have the semantics be that 'from' is really a concatnation of both peer ids, because
         // you could have multiple rtc instances (multiple receivers) between a given pair.
-        if ((messageObject.from !== this.receiver.peerId)) return // normal. Next line would indicate a bug, though.
+        const peer = this.receiver.peerId;
+        if (peer && (messageObject.from !== peer)) return // normal. Next line would indicate a bug, though.
         if (messageObject.to !== this.id) return console.warn(`${messageObject.type} to ${messageObject.to} received at ${this.id}`);
-        this.receiver[messageObject.type](messageObject.data);
+        // untyped messages must be handled by an application-specific onmessage handler.
+        if (messageObject.type) this.receiver[messageObject.type](messageObject.data, messageObject);
     }
     // Not every subclass connection has a close event that we can attach to for doing cleanup. So instead, clients should
     // call this close method explicitly. (And subclasses will extend this method to close the underlying connection as needed.)
@@ -135,9 +137,9 @@ wss.on('connection', function (ws, req) {
 */
 
 class WebSocketDispatch extends P2pDispatch {
-    constructor(id, receiver) {
+    constructor(id, receiver, ignoredEvents, waitForOpen = true) {
         super(id, receiver);
-        return this.constructor.getConnection(this).then(connection => {
+        return this.constructor.getConnection(this, waitForOpen).then(connection => {
             this.connection = connection;
             // add/removeEventListener to connection, rather than preventing applications from using connection.onmessage.
             this.onmessage = event => this.p2pReceive(JSON.parse(event.data));
@@ -150,13 +152,14 @@ class WebSocketDispatch extends P2pDispatch {
     // more than one WebSocket connection per message.to id. Therefore, we must multiplex multiple receiver objects on the same
     // id over a single WebSocket. We could do this with a single handler that dispatches to the receiver that matches mssage.from,
     // but currently, we do that by multiple onmessage, 
-    static getConnection1(instance) { // create or update connection for new id, returning a promise that resolves when open
+    static getConnection1(instance, waitForOpen = true) { // create or update connection for new id, returning a promise that resolves when open
         const id = instance.id;
         const dispatchers = WebSocketDispatch.peers[id] = (WebSocketDispatch.peers[id] || []);
         dispatchers.push(instance);
         if (dispatchers.length > 1) return Promise.resolve(dispatchers[0].connection);
         return new Promise(resolve => {
             const connection = new WebSocket(`${WebSocketDispatch.site}/${id}`);
+            if (!waitForOpen) return resolve(connection);
             connection.onopen = _ => { connection.onopen = null; resolve(connection); };
         });
     }
@@ -188,10 +191,10 @@ WebSocketDispatch.peers = {};
 // One subtle thing is that WebSocket guarantees the order of messages, but (post /message) does not. To make this work,
 // we require that the server not respond to /message (e.g., with 200) until it has actually sent the SSE.
 class EventSourceDispatch extends P2pDispatch {
-    constructor(id, receiver, eventTypes) {
+    constructor(id, receiver, eventTypes, waitForOpen = true) {
         super(id, receiver);
-            this.eventTypes = eventTypes;
-        return this.constructor.getConnection(this).then(connection => {
+        this.eventTypes = eventTypes;
+        return this.constructor.getConnection(this, waitForOpen).then(connection => {
             this.connection = connection;
             // If we simply called fetch(..a..), fetch(..b..), the receiver might
             // see b before a. By serializing them, we ensure that the server sees AND RESPSONDS to
@@ -222,13 +225,14 @@ class EventSourceDispatch extends P2pDispatch {
             return this;
         });
     }
-    static getConnection1(instance) {
+    static getConnection1(instance, waitForOpen = true) {
         const id = instance.id;
         const dispatchers = EventSourceDispatch.peers[id] = (EventSourceDispatch.peers[id] || []);
         dispatchers.push(instance);
         if (dispatchers.length > 1) return Promise.resolve(dispatchers[0].connection);
         return new Promise(resolve => {
             const connection = new EventSource(`/messages/${id}`);
+            if (!waitForOpen) return resolve(connection);
             connection.onopen = _ => { connection.onopen = null; resolve(connection); };
         });
     }
@@ -328,7 +332,7 @@ class RTCSignallingPeer {
                    );
         if (!this.lockResponse) { // See acquireLock, below.
             return this.acquireLock(_ =>  {
-                this.negotiationnneded();
+                this.negotiationneeded();
                 return new Promise(resolve => {
                     this.fixmehack = resolve;
                 });
@@ -368,10 +372,11 @@ class RTCSignallingPeer {
     // Applications should not create data channel or add tracks directly to this.peer. Use these two instead.
     // They both answer a promise that does not resolve until channel or stream is "ready" for use.
 
-    createDataChannel(label = "data", options = {}) { // Promise resolves when the channel is open (implying negotiation has happened).
+    createDataChannel(label = "data", options = {}, waitForOpen = true) { // Promise resolves when the channel is open (implying negotiation has happened).
         fixme('createDataChannel', this.id);
         return this.acquireLock(_ => {
             const channel = this.peer.createDataChannel(label, options);
+            if (!waitForOpen) return Promise.resolve(channel);
             return new Promise(resolve => channel.onopen = _ => resolve(channel));
         });
     }
