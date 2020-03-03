@@ -93,7 +93,7 @@ function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces ope
     if (HEARTBEAT_IS_PING_PONG) {
         if (res.gotPong === false) { // undefined doesn't count
             console.info(`${new Date()}: No pong from ${res.guid} (${res.gotPong}), closing.`);
-            return closeRegistrant(res); // We didn't get a pong from last ping. Kill 'em.
+            return // FIXME! closeRegistrant(res); // We didn't get a pong from last ping. Kill 'em.
         }
         res.gotPong = false;
         sendSSE(res, JSON.stringify({type:'ping', to:res.guid, from:res.guid, data:HEROKU_PROXY_TIMEOUT_MS}), 'ping');
@@ -162,7 +162,7 @@ app.get('/messages/:id', function (req, res) {
     res.writeHead(200, headers);
     res.sseMessageId = 0;
     res.guid = id;
-    //FIXME res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
+    res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
     res.originalRequest = req; // For logging when it closes.
     if (redis) redis.hmset(id, 'online', Date.now());
     pseudo.info(req);

@@ -20,8 +20,8 @@ function initEventSource() {
         clearTimeout(pingTimer);
         pingTimer = setTimeout(_ => {
             console.warn('No SSE ping from server.');
-            closeEventSource();
-            setTimeout(initEventSource, 3000);
+            /* FIXME! closeEventSource();
+            setTimeout(initEventSource, 3000);*/
         }, PING_TIMEOUT_MS);
         sendSseMessage(undefined, 'pong').catch(console.log);
     }
