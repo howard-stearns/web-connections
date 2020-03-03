@@ -383,6 +383,7 @@ describe('browser side', function () {
                     describe('media', function () {
                         var stream, masterStream;
                         beforeAll(function (done) {
+                            if (!navigator.mediaDevices) return masterStream = null;
                             navigator.mediaDevices
                                 .getUserMedia({video: true, audio: true})
                                 .then(mediaStream => masterStream = mediaStream)
