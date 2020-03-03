@@ -8,6 +8,7 @@ const https = require('https'); // for forwarding to hifi-telemetric
 const morgan = require('morgan')
 const pseudo = require('./pseudo-request');
 const pkg = require('./package.json');
+const redis = process.env.REDIS_URL && require('redis').createClient(process.env.REDIS_URL);
 
 process.title = "p2p-load-test";
 const app = express();
@@ -26,6 +27,7 @@ function rawBodySaver(req, res, buf, encoding) {
 app.use(bodyParser.json({verify: rawBodySaver}));
 app.use(bodyParser.urlencoded({extended: true}));
 
+const CREDITS_PER_MS = 1.667;
 app.post('/upload', function (req, res) {
     const forward = https.request({
         hostname: "hifi-telemetric.herokuapp.com",
@@ -37,6 +39,20 @@ app.post('/upload', function (req, res) {
         }
     }, forwardResponse => {
         forwardResponse.on('data', d => {
+            if (redis) {
+                // We have a retest button, and of course browsers have reload. So no point in prohibiting
+                // uploads that are "too soon". For a dead upload without actually being online, they'll only
+                // get 2 credits anyway (at today's rate).
+                const id = req.body.id;
+                redis.hmget(id, 'online', 'credits', function (error, data) {
+                    if (error) console.error(error);
+                    const online = data[0] ? parseInt(data[0]) : 0;
+                    const credits = data[1] ? parseInt(data[1]) : 0;
+                    const msOnline = online ? (Date.now() - online) : 1;
+                    const update = credits + Math.round(msOnline * CREDITS_PER_MS);
+                    redis.hset(id, 'credits', update);
+                });
+            }
             const data = d.toString();
             // Good form to send content-type. E.g., because the client is using XMLHttpRequest
             // for MSIE compatability, Firefox will spit out a noisy error about the response not
@@ -116,6 +132,7 @@ app.post('/message', function (req, res) {
 var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.
 const SHUTDOWN_RETRY_TIMEOUT_MS = 30 * 1000;
 function closeRegistrant(res, retryTimeout) {
+    if (redis) redis.hmset(res.guid, 'online', 0);
     clearInterval(res.heartbeat);
     delete registrants[res.guid];
     res.originalRequest.method = 'DELETE'; // For logging purposes.
@@ -147,6 +164,7 @@ app.get('/messages/:id', function (req, res) {
     res.guid = id;
     res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
     res.originalRequest = req; // For logging when it closes.
+    if (redis) redis.hmset(id, 'online', Date.now());
     pseudo.info(req);
 
     req.on('close', _ => {
@@ -186,6 +204,19 @@ app.ws('/:id', function (ws, req) {
         delete wsRegistrants[id];
         req.method = 'DELETE'; // For logging purposes
         pseudo.info(req);
+    });
+});
+
+app.get('/stats/:id', function (req, res) {
+    const id = req.params.id;
+    res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
+    if (!redis) return res.end("{}");
+    redis.hget(id, 'credits', function (error, data) {
+        if (error) return res.end(JSON.stringify({error: error}));
+        res.end(JSON.stringify({
+            credits: parseInt(data) || 0,
+            rate: CREDITS_PER_MS
+        }));
     });
 });
 
@@ -231,6 +262,7 @@ function shutdown(signal) {
     acceptingRegistrants = false
     server.close(_ => console.log('Closed server'));
     turn.stop();
+    if (redis) redis.quit()
     Object.values(registrants).forEach(res => closeRegistrant(res, SHUTDOWN_RETRY_TIMEOUT_MS));
     browser.close();
 }

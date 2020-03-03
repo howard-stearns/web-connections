@@ -17,12 +17,24 @@ var browserData = {
 }
 dummy = null;
 
-const loadStart = Date.now();
-const creditsTimer = setInterval(_ => {
+var loadStart, rate, creditsTimer;
+function updateCredits() {
     const sinceStart = Date.now() - loadStart;
-    const accrued = (sinceStart * 1.667);
+    const accrued = sinceStart * rate;
     credits.innerHTML = Math.floor(accrued).toLocaleString(undefined, {minimumIntegerDigits: 9});
-}, 100);
+}
+function setCredits() {
+    var xmlhttp = new XMLHttpRequest();
+    xmlhttp.open("GET", "/stats/" + guid);
+    xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    xmlhttp.onload = function () {
+        const data = JSON.parse(xmlhttp.response);
+        rate = data.rate;
+        loadStart = Date.now() - Math.round(data.credits / rate);
+        creditsTimer = setInterval(updateCredits, 100);
+    };
+    xmlhttp.send();
+}
 
 function uuidv4(label) { // Not crypto strong, but good enough for prototype.
     label = label || '';
@@ -37,6 +49,7 @@ function uuidv4(label) { // Not crypto strong, but good enough for prototype.
 // but it is shared between tabs of the same browser.
 var ID_KEY = 'guid';
 var guid = (window.localStorage && localStorage.getItem(ID_KEY)) || uuidv4();
+setCredits();
 
 // Reporting:
 const FAIL_VALUE = 'FAIL';
@@ -120,7 +133,6 @@ browserData.date = now.toISOString();
 browserData.tzOffset = now.getTimezoneOffset();
 if (FAILED) {
     clearInterval(creditsTimer);
-    credits.innerHTML = "1";
     report(browserData);
 }
 localStorage.setItem(ID_KEY, guid);

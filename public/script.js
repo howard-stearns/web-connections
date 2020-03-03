@@ -13,7 +13,7 @@ function initEventSource() {
     // Server will timeout the connection, but a reload produce confusing results unless we play nice.
     function closeEventSource() {
         clearTimeout(pingTimer);
-        homeLine.close();
+        if (homeLine) homeLine.close();
         homeLine = null;
     }
     function ping(data) {
