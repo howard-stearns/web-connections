@@ -386,6 +386,7 @@ describe('browser side', function () {
                             if (!navigator.mediaDevices) return done();
                             navigator.mediaDevices
                                 .getUserMedia({video: true, audio: true})
+                                .catch(_ => null)
                                 .then(mediaStream => masterStream = mediaStream)
                                 .then(done);
                         });
