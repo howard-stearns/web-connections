@@ -389,15 +389,22 @@ describe('browser side', function () {
                                 .then(done);
                         });
                         beforeEach(function () {
-                            stream = masterStream.clone();
+                            stream = masterStream && masterStream.clone();
                         });
                         afterEach(function () {
-                            stream.getTracks().forEach(track => track.stop());
+                            stream && stream.getTracks().forEach(track => track.stop());
                         });
                         afterAll(function () {
-                            masterStream.getTracks().forEach(track => track.stop());
+                            masterStream && masterStream.getTracks().forEach(track => track.stop());
                         });
+                        function checkStream(done) {
+                            if (masterStream) return true;
+                            pending();
+                            done();
+                            return false;
+                        }
                         it('can send media', function (done) {
+                            if (!checkStream(done)) return;
                             var nTracks = stream.getTracks().length;
                             Promise.all([
                                 rtcA.addStream(stream),
@@ -413,6 +420,7 @@ describe('browser side', function () {
                             ]).then(_ => setTimeout(done, 0));
                         });
                         it('can send media in both directions', function (done) {
+                            if (!checkStream(done)) return;
                             const stream2 = stream.clone();
                             var n1 = stream.getTracks().length, n2 = stream2.getTracks().length;
                             Promise.all([
@@ -428,6 +436,7 @@ describe('browser side', function () {
                             });
                         });
                         it('can send data and media', function (done) {
+                            if (!checkStream(done)) return;
                             Promise.all([
                                 new Promise(resolve => {
                                     rtcB.peer.ondatachannel = event => {
