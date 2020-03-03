@@ -128,9 +128,13 @@ Object.keys(browserData).forEach(function (key) {
 ourId.innerHTML = browserData.id = guid; 
 agent.innerHTML = browserData.agent = navigator.userAgent;
 
-const now = new Date();
-browserData.date = now.toISOString();
-browserData.tzOffset = now.getTimezoneOffset();
+function setTimestamp() {
+    const now = new Date();
+    browserData.date = now.toISOString();
+    browserData.tzOffset = now.getTimezoneOffset();
+}
+setTimestamp();
+
 if (FAILED) {
     clearInterval(creditsTimer);
     report(browserData);

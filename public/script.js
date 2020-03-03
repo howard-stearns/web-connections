@@ -333,6 +333,7 @@ function doAllTests() {
     retest.disabled = true;
     clearTimeout(retestTimer);
     if (FAILED) return console.error("Missing required functionality.");
+    setTimestamp();
     obtainMediaStream(browserData.av, browserData, 'mediaSetup') // Just once...
         .then(media => stream = media) // ... and shared among each RTCPeerConnection
         .then(updateTestingMessage)
