@@ -19,6 +19,7 @@ dummy = null;
 
 var loadStart, rate, creditsTimer;
 function updateCredits() {
+    if (!loadStart || !rate) return;
     const sinceStart = Date.now() - loadStart;
     const accrued = sinceStart * rate;
     credits.innerHTML = Math.floor(accrued).toLocaleString(undefined, {minimumIntegerDigits: 9});
