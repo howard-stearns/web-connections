@@ -262,9 +262,9 @@ function shutdown(signal) {
     acceptingRegistrants = false
     server.close(_ => console.log('Closed server'));
     turn.stop();
-    if (redis) redis.quit()
     Object.values(registrants).forEach(res => closeRegistrant(res, SHUTDOWN_RETRY_TIMEOUT_MS));
     browser.close();
+    if (redis) redis.quit()
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
