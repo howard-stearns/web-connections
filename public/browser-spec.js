@@ -381,9 +381,9 @@ describe('browser side', function () {
                         });
                     });
                     describe('media', function () {
-                        var stream, masterStream;
+                        var stream = null, masterStream = null;
                         beforeAll(function (done) {
-                            if (!navigator.mediaDevices) return masterStream = null;
+                            if (!navigator.mediaDevices) return done();
                             navigator.mediaDevices
                                 .getUserMedia({video: true, audio: true})
                                 .then(mediaStream => masterStream = mediaStream)
