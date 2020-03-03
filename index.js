@@ -162,7 +162,7 @@ app.get('/messages/:id', function (req, res) {
     res.writeHead(200, headers);
     res.sseMessageId = 0;
     res.guid = id;
-    res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
+    //FIXME res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
     res.originalRequest = req; // For logging when it closes.
     if (redis) redis.hmset(id, 'online', Date.now());
     pseudo.info(req);
