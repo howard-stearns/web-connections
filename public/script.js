@@ -241,7 +241,7 @@ class TestingConnection extends CommonConnection {
         return new TestingConnection(peerId, testGUID).then(connection => {
             var mediaStartTime;
             connection.results = Object.assign({peer: peerId}, browserData);
-            return connection.createDataChannel(`${connection.id} => ${connection.peerId}`, {}, false)
+            return connection.createDataChannel(`${connection.id} => ${connection.peerId}`, {}, {waitForOpen: false})
                 .then(c => connection.initDataChannel(c))
                 .then(_ => testSetupPingBandwidth('data', connection.channel,
                                                   data => connection.channel.send(data),

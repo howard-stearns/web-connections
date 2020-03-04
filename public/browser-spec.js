@@ -33,7 +33,7 @@ describe('browser side', function () {
     });
     var idA, idB;
     beforeEach(function () {
-        idA = uuidv4(Math.random() < 0.5 ? 'A' : 'C'); // One is "polite" relatibe to idB, the other not.
+        idA = uuidv4('C' /*FIXME Math.random() < 0.5 ? 'A' : 'C'*/); // One is "polite" relatibe to idB, the other not.
         idB = uuidv4('B');
     });
     describe('p2pDispatch', function () {
@@ -182,19 +182,17 @@ describe('browser side', function () {
                 var label = "foo", payload = "ping";
                 describe('lock', function () {
                     const pauseMs = 1000;
-                    async function waits() {
+                    async function waits(resolve) {
                         await new Promise(resolve => setTimeout(resolve, pauseMs));
-                        return 1;
+                        return resolve(1);
                     }
-                    function resolves() {
-                        return new Promise(resolve => setTimeout(_ => {
-                            resolve(1);
-                        }, pauseMs));
+                    function resolves(resolve) {
+                        setTimeout(_ => resolve(1), pauseMs);
+			return 1;
                     }
-                    function rejects() {
-                        return new Promise((_, reject) => setTimeout(_ => {
-                            reject(99);
-                        }, pauseMs));
+                    function rejects(_, reject) {
+                        setTimeout(_ => reject(99), pauseMs);
+			return 1;
                     }
                     describe('acquire and releases', function () {
                         it('with waiting', function (done) {
@@ -225,26 +223,27 @@ describe('browser side', function () {
                     describe('queues in order', function () {
                         function testQueueing(connectionA, connectionB, done) {
                             var executingA = false, executingB = false;
+			    // These two promises are overly complex because acquireLock had started with a different API.
+			    // IWBNI we went back and simplified them.
                             Promise.all([
-                                connectionA.acquireLock(async _ => {
+                                connectionA.acquireLock(async resolve => {
                                     var x;
                                     executingA = true;
                                     expect(executingB).toBeFalsy();
-                                    x = await waits();
+                                    x = await new Promise(resolve => waits(resolve));
                                     expect(x).toBe(1);
                                     executingA = false;
                                     expect(executingB).toBeFalsy();
-                                    return 'a';
+                                    resolve('a');
                                 }),
-                                connectionB.acquireLock(_ => {
+                                connectionB.acquireLock(resolve => {
                                     executingB = true;
                                     expect(executingA).toBeFalsy();
-                                    return resolves().then(x => {
+                                    new Promise(resolve => resolves(resolve)).then(x => {
                                         expect(x).toBe(1);
                                         executingB = false;
                                         expect(executingA).toBeFalsy();
-                                        return 'b';
-
+                                        resolve('b');
                                     });
                                 })
                             ]).then(([a, b]) => {

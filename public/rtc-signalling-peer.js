@@ -100,7 +100,7 @@ class RandomDelayLoopbackDispatch extends P2pDispatch {
             const message = this.messageQueue.pop();
             const dispatchers = this.constructor.peers[message.to]
             dispatchers.forEach(dispatcher => dispatcher.p2pReceive(message));
-        }, Math.random() * this.constructor.MaxDelayMS);
+        }, Math.random() * this.constructor.MaxDelayMS); // Edge fails a lot above 150ms.
     }
     close() {
         if (!this.id) return;
@@ -339,9 +339,6 @@ class RTCSignallingPeer {
         if (!this.lockResponse) { // See acquireLock, below.
             return this.acquireLock(_ =>  {
                 this.negotiationneeded();
-                return new Promise(resolve => {
-                    this.fixmehack = resolve;
-                });
             });
         }
         const peer = this.peer;
@@ -378,76 +375,83 @@ class RTCSignallingPeer {
     // Applications should not create data channel or add tracks directly to this.peer. Use these two instead.
     // They both answer a promise that does not resolve until channel or stream is "ready" for use.
 
-    createDataChannel(label = "data", options = {}, waitForOpen = true) { // Promise resolves when the channel is open (implying negotiation has happened).
+    createDataChannel(label = "data", channelOptions = {}, {waitForOpen = true, timeout, delay = 1000} = {}) { // Promise resolves when the channel is open (implying negotiation has happened).
+        // One should not write on an RTCDataChannel until it gets 'open'. So that's when we primarily resolve.
+        // However, some browsers have bugs (cough, Edge), in which they sometimes fail to signal 'open', particularly if signaling takes too long.
+        // So... acquireLock is watching for peer.signalingState returning to stable anyway (for negotiationneeded and addStream), so if we detect that
+        // we will finish up delay (1000 ms) after stable (unless we do get 'open' in the mean time), and hope for the best.
+        // (Sometimes even then, Edge fails to mark the channel open and checks for open when you try to send. Sigh.)
         fixme('createDataChannel', this.id);
-        return this.acquireLock(_ => {
-            const channel = this.peer.createDataChannel(label, options);
-            if (!waitForOpen) return Promise.resolve(channel);
-            return new Promise(resolve => channel.onopen = _ => resolve(channel));
-        });
+        return this.acquireLock(resolve => {
+            const channel = this.peer.createDataChannel(label, channelOptions);
+            if (waitForOpen) {
+                channel.onopen = _ => resolve(channel);
+            } else{
+                resolve(channel);
+            }
+            return channel;
+        }, timeout, delay);
     }
-    addStream(stream) { // Promise resolves when the peer has negotiated.
+    addStream(stream, {timeout, delay} = {}) { // Promise resolves when the peer has negotiated.
         fixme('addStream', this.id);
-        return this.acquireLock(_ => {
-            if (!stream) return; // If it went away by the time we got a lock.
-            const tracks = stream.getTracks();
-            var nOutstandingTracks = tracks.length;
-            fixme('adding tracks', this.id);
-            tracks.forEach(track => this.peer.addTrack(track, stream));
-            fixme('added tracks', this.id);
+        return this.acquireLock(resolve => {
+            if (!stream) return resolve(null); // If it went away by the time we got a lock.
+            stream.getTracks().forEach(track => this.peer.addTrack(track, stream));
             // There isn't a media equivalent to 'onopen' as there is for dataChannel,
             // so I haven't found a very satisfying way to know whether the media is really
-            // established and ready for use. Here we just wait until we move out of stable and back to it.
+            // established and ready for use. Here we just wait until we move out of stable
+            // and back to it, which is the default for acquireLock.
             // (Note that acquireLock makes sure that we were stable when we entered here and added the tracks.)
             // I have also tried listening on the other side for the tracks, and having it send a message back to
             // to us over the signaling connection. But for all it's complexity, that didn't seem to offer any advantage.
-            return new Promise(resolve => {
-                var that = this;
-                function checkSignalingState() {
-                    fixme('signaling state', that.peer.signalingState, that.id);
-                    if (that.peer.signalingState === 'stable') {
-                        that.peer.removeEventListener('signalingstatechange', checkSignalingState);
-                        resolve(stream);
-                    }
-                }
-                this.peer.addEventListener('signalingstatechange', checkSignalingState);
-            });
-        });
+            return stream;
+        }, timeout, delay);
     }
-    // Executes thunk with a mutex between the peers.
-    // That is, thunk will wait until the cross-network mutex has been obtained.
-    // Thunk can be an async function, or it can return a promise, and the mutex is released automatically
-    // when the async completes or resolves, or upon timeoutMs elapsing.
-    // The aquireLock method itself return a promise that resolves when the thunk does, and it resolves to
-    // whatever the promise or thunk returned, or null if there was an error or rejection in the thunk.
+    // Executes body(resolve, reject) with a mutex between the peers.
+    // Requests to acquireLock will be queued up and execute one at a time (on our side of the pair), in serial.
+    // When it our turn, we request a lock from our peer and wait for it. This is done as a two phase commit:
+    // - If only one side requests, it goes when the other side agrees.
+    // - If both sides request before either has obtained the lock, then the one that isPolite() allows the other to go.
+    // A promise is returned that is not resolved until body completes, which then also releases the lock, allowing
+    // any pending bodies to then start. There are several ways to complete the body:
+    // - body is given functions resolve, reject. These can be called from body to complete the work.
+    //   The resolved value is used as the value of the promise returned by aquireLock.
+    // - Otherwise, we monitor signaling state changes. (It is assumed that body triggers signaling.)
+    //   After we return to stable, body is resolved automatically.
+    // - Otherwise, a timer is started WHEN WE REQUEST THE LOCK FROM THE PEER (not when we are waiting our turn to run).
+    //   When this goes off, the body is rejected.
     // The mutex exists only between the two pairs. It does not effect other RTCSignallingPeers, even in the same browser.
-    acquireLock(thunk, timeoutMs = 5000) {
-        var timeout;
+    acquireLock(body, timeoutMs = 5000, stableResolutionDelayMs = 1) {
+        var timeout, onStateChange, result, delay;
         fixme('attempting to acquireLock at', this.id);
         return this.queue = this.queue
             .then(_ => new Promise((resolve, reject) => {
                 fixme('aquireLock processing at', this.id);
                 timeout = setTimeout(_ => {fixme('lock timeout!', this.id); reject()}, timeoutMs);
+                onStateChange = _ => {
+                    fixme('signaling state', this.peer.signalingState, this.id);
+                    if (this.peer.signalingState === 'stable') {
+                        delay = setTimeout(_ => resolve(result), stableResolutionDelayMs);
+                    }
+                };
                 this.lockResponse = _ => {
                     fixme('acquire lock at', this.id);
                     this.acquired = true;
-                    const thunkResult = thunk();
-                    if (thunkResult.then) {
-                        thunkResult.then(resolve, reject);
-                    } else {
-                        resolve(thunkResult);
-                    }
-                }
+                    this.peer.addEventListener('signalingstatechange', onStateChange);
+                    result = body(resolve, reject);
+                };
                 this.p2pSend('lockRequest');
             }))
             .catch(_ => null)
-            .then(value => {
+            .then(result => {
                 clearTimeout(timeout);
+                clearTimeout(delay);
+                this.peer.removeEventListener('signalingstatechange', onStateChange);
                 const hasPending = this.peerLockPending;
                 fixme('completed locked work at', this.id, 'hasPending:', !!hasPending);
                 this.lockResponse = this.peerLockPending = this.acquired = null;
                 if (hasPending) {fixme('sending lockResponse', this.id); this.p2pSend('lockResponse');}
-                return value;
+                return result;
             })
     }
     lockRequest() {

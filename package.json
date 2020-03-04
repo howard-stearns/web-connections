@@ -1,6 +1,6 @@
 {
     "name": "web-connections",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "description": "Test bed for investigating p2p connectivity between web pages",
     "main": "index.js",
     "scripts": {
