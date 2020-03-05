@@ -4,6 +4,7 @@
 // Everything through the first call to report() on FAILED should work in IE9
 var FAILED = false;
 var dummy = window.RTCPeerConnection && new window.RTCPeerConnection();
+var audioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.oAudioContext || window.msAudioContext;
 var browserData = {
     promises: !!window.Promise,
     storage: !!window.localStorage,
@@ -13,7 +14,11 @@ var browserData = {
     t2s: !!window.speechSynthesis,
     rtc: !!window.RTCPeerConnection,
     dchan: dummy && !!dummy.createDataChannel,
-    av: navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia
+    av: navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia,
+    audioNode: !!audioContext
+        && !!window.MediaStreamAudioDestinationNode && !!window.ChannelMergerNode
+        && !!new audioContext().createChannelMerger && !!new audioContext().createMediaStreamDestination,
+    capture: !!dummyVideo.captureStream
 }
 dummy = null;
 
@@ -120,7 +125,7 @@ function report(data) {
 
 Object.keys(browserData).forEach(function (key) {
     document.getElementById(key).checked = browserData[key];
-    if (!browserData[key] && ['av', 't2s', 's2t'].indexOf(key) < 0) {
+    if (!browserData[key] && ['av', 't2s', 's2t', 'audioNode', 'capture'].indexOf(key) < 0) {
         FAILED = true;
         browserData.concurrency = browserData.concurrency || 'missing:';
         browserData.concurrency += ' ' + key;
