@@ -287,7 +287,6 @@ class RTCSignallingPeer {
         peer.addEventListener('icecandidateerror', this.onicecandidateerror);
         // These are not widely supported, but might be useful for debugging.
         //peer.onconnectionstatechange = _ => console.log(this.id, 'connection state', peer.connectionState);
-        //peer.onsignalingstatechange = _ => console.log(this.id, 'signalling state', peer.signalingState);
         //peer.oniceconnectionstatechange = _ => console.log(this.id, 'ice connection state', peer.iceConnectionState);
         //peer.onicegatheringstatechange = _ => console.log(this.id, 'ice gathering state', peer.iceGatheringState);
         

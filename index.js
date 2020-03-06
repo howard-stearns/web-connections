@@ -39,19 +39,23 @@ app.post('/upload', function (req, res) {
         }
     }, forwardResponse => {
         forwardResponse.on('data', d => {
+            var code = 200;
             if (redis) {
                 // We have a retest button, and of course browsers have reload. So no point in prohibiting
                 // uploads that are "too soon". For a dead upload without actually being online, they'll only
                 // get 2 credits anyway (at today's rate).
-                const id = req.body.id;
-                redis.hmget(id, 'online', 'credits', function (error, data) {
-                    if (error) console.error(error);
-                    const online = data[0] ? parseInt(data[0]) : 0;
-                    const credits = data[1] ? parseInt(data[1]) : 0;
-                    const msOnline = online ? (Date.now() - online) : 1;
-                    const update = credits + Math.round(msOnline * CREDITS_PER_MS);
-                    redis.hset(id, 'credits', update);
-                });
+                const id = req.body.id,
+                      registration = registrants[id],
+                      equivalentStartTimeMs = registration && registration.startTime;
+                if (!equivalentStartTimeMs) {
+                    // Shouldn't happen, but if it does, we handled the data upload, but we can't
+                    // credit the user because they're not connected/available. Page should be reloaded.
+                    code = 205; 
+                } else {
+                    const sinceStart = Date.now() - equivalentStartTimeMs;
+                    const accrued = sinceStart * CREDITS_PER_MS;
+                    redis.hset(id, 'credits', Math.round(accrued), error => console.error(error));
+                }
             }
             const data = d.toString();
             // Good form to send content-type. E.g., because the client is using XMLHttpRequest
@@ -132,7 +136,6 @@ app.post('/message', function (req, res) {
 var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.
 const SHUTDOWN_RETRY_TIMEOUT_MS = 30 * 1000;
 function closeRegistrant(res, retryTimeout) {
-    if (redis) redis.hmset(res.guid, 'online', 0);
     clearInterval(res.heartbeat);
     delete registrants[res.guid];
     res.originalRequest.method = 'DELETE'; // For logging purposes.
@@ -164,7 +167,19 @@ app.get('/messages/:id', function (req, res) {
     res.guid = id;
     res.heartbeat = setInterval(_ => heartbeatSSE(res), HEROKU_PROXY_TIMEOUT_MS);
     res.originalRequest = req; // For logging when it closes.
-    if (redis) redis.hmset(id, 'online', Date.now());
+    // We don't keep the time connected in redis, because we're keeping a socket with this ephemeral data anyway.
+    // When the socket (entry in registrants) goes away, there's no need to reset that in a db.
+    // Separately, the startTime is an equivalent startTime to make computation of new credits simple on /upload.
+    if (redis) {
+        redis.hget(id, 'credits', function (error, data) {
+            if (error) {
+                console.error(error);
+            } else {
+                const credits = parseInt(data || "0", 10);
+                res.startTime = Date.now() - Math.round(credits / CREDITS_PER_MS);
+            }
+        });
+    }
     pseudo.info(req);
 
     req.on('close', _ => {
@@ -211,10 +226,13 @@ app.get('/stats/:id', function (req, res) {
     const id = req.params.id;
     res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
     if (!redis) return res.end("{}");
+    // There's a temptation to avoid a second hit of redis and to instead get the equivalent
+    // start time from resistrants. But this is more robust and flexible. E.g., this is independent
+    // of whether/when the browser inits its SSE connection.
     redis.hget(id, 'credits', function (error, data) {
         if (error) return res.end(JSON.stringify({error: error}));
         res.end(JSON.stringify({
-            credits: parseInt(data) || 0,
+            credits: parseInt(data || '0', 10),
             rate: CREDITS_PER_MS
         }));
     });

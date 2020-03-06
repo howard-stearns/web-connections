@@ -33,7 +33,7 @@ describe('browser side', function () {
     });
     var idA, idB;
     beforeEach(function () {
-        idA = uuidv4('C' /*FIXME Math.random() < 0.5 ? 'A' : 'C'*/); // One is "polite" relatibe to idB, the other not.
+        idA = uuidv4(Math.random() < 0.5 ? 'A' : 'C'); // One is "polite" relatibe to idB, the other not.
         idB = uuidv4('B');
     });
     describe('p2pDispatch', function () {
