@@ -67,7 +67,7 @@ Very rough typical figures (averaged by eye over a small sample):
 - Bandwidth for media is from the stats bytesSent and the test runtime.
 - (*) **I have a performance bug!** The test page deliberately tests against all known peers simultaneously, to simulate our app's traffic. But the serialization of signaling (to deal with glare) is serializing _per-browser_, instead of _per-pair_. That makes the setup for each peer happen one at time. I will fix that! (Nice that the numbers were (just barely) clear enough to suggest that there is a bug.)
 
-(I'm thinking we should probably get a true average and one-std-deviation below. I expect we would find that it is bimodal for wifi separate from cellular, but we don't have a way to check whether someone is on cellular.)
+(_**I'm thinking we should probably get a true average and one-std-deviation below. I expect we would find that it is bimodal for wifi separate from cellular, but we don't have a way to check whether someone is on cellular.**_)
 
 ## Primary API
 
