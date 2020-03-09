@@ -75,11 +75,11 @@ class LoopbackDispatch extends P2pDispatch {
     }
     close() {
         if (!this.id) return;
-        super.close();
         const dispatchers = this.constructor.peers[this.id];
         dispatchers.splice(dispatchers.indexOf(this), 1);
         if (!dispatchers.length) delete this.constructor.peers[this.id];
         this.id = null;
+        super.close();
     }
 }
 LoopbackDispatch.peers = {};
@@ -104,11 +104,11 @@ class RandomDelayLoopbackDispatch extends P2pDispatch {
     }
     close() {
         if (!this.id) return;
-        super.close();
         const dispatchers = this.constructor.peers[this.id];
         dispatchers.splice(dispatchers.indexOf(this), 1);
         if (!dispatchers.length) delete this.constructor.peers[this.id];
         this.id = null;
+        super.close();
     }
 }
 RandomDelayLoopbackDispatch.peers = {}; // Not shared with base class.
@@ -168,7 +168,6 @@ class WebSocketDispatch extends P2pDispatch {
     }
     close() {
         if (!this.connection) return;
-        super.close();
         this.connection.removeEventListener('message', this.onmessage);
 
         const dispatchers = this.constructor.peers[this.id];
@@ -178,6 +177,7 @@ class WebSocketDispatch extends P2pDispatch {
             this.connection.close();
         }
         this.connection = null;
+        super.close();
     }
 }
 WebSocketDispatch.site = ((location.protocol === 'https:') ? 'wss:' : 'ws:') + "//" + location.host;
@@ -241,7 +241,6 @@ class EventSourceDispatch extends P2pDispatch {
     }
     close() {
         if (!this.connection) return;
-        super.close();
         this.eventTypes.forEach(type => this.connection.removeEventListener(type, this.onmessage));
 
         const dispatchers = this.constructor.peers[this.id];
@@ -251,6 +250,7 @@ class EventSourceDispatch extends P2pDispatch {
             this.connection.close();
         }
         this.connection = null;
+        super.close();
     }
 }
 EventSourceDispatch.getConnection = serializePromises(EventSourceDispatch.getConnection1);
