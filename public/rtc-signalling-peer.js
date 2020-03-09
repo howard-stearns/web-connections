@@ -367,8 +367,7 @@ class RTCSignallingPeer {
             .then(_ => this.p2pSend('answer', peer.localDescription));
     }
     answer(answer) { // Handler for finishing the signalling process that we started.
-        this.peer.setRemoteDescription(answer)
-            .then(_ => { if (this.fixmehack) this.fixmehack(); });
+        this.peer.setRemoteDescription(answer);
     }
 
     // Applications should not create data channel or add tracks directly to this.peer. Use these two instead.
