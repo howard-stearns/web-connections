@@ -41,10 +41,10 @@ function initEventSource() {
     }
     // We will now be reported to others, so respond if they start to connect to us.
     function lockRequest(data, message) {
-        // This could be a renegotiation of something that already has it's own connection.
-        if (RespondingConnection.existingInstance(message.from)) return;
+        // This could be a renegotiation of something that already has it's own RTC.
+        if (RespondingRTC.existingInstance(message.from)) return;
         // Create a responder and let it act on the offer.
-        return new RespondingConnection(message);
+        return new RespondingRTC(message);
     }
     if (homeLine) return sendSseMessage(undefined, 'listing').then(_ => [homeLine, true]);
     window.addEventListener('beforeunload', closeEventSource);
@@ -176,7 +176,7 @@ function obtainMediaStream(browserHasMedia, collector, key) {
 }
 
 var contributionCount = 0;
-class CommonConnection extends EventSourceRTC { // Connection to whatever we are testing with. Two subclasses, below.
+class CommonRTC extends EventSourceRTC { // RTC peer to whatever we are testing with. Two subclasses, below.
     constructor(peerId, ourId = guid) {
         return super(ourId, peerId, RTC_CONFIGURATION);
     }
@@ -186,7 +186,7 @@ class CommonConnection extends EventSourceRTC { // Connection to whatever we are
     }
 }
 
-class RespondingConnection extends CommonConnection { // If someone is starting a test with us, this is how we respond.
+class RespondingRTC extends CommonRTC { // If someone is starting a test with us, this is how we respond.
     static existingInstance(id) {
         return this.instances[id];
     }
@@ -231,29 +231,29 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
         super.close();
     }
 }
-RespondingConnection.events = RTCSignalingPeer.events.concat('close');
-RespondingConnection.instances = {};
+RespondingRTC.events = RTCSignalingPeer.events.concat('close');
+RespondingRTC.instances = {};
 
 var testSSE;
 var testGUID = 'T' + guid;
-class TestingConnection extends CommonConnection {
+class TestingRTC extends CommonRTC {
     static run(peerId) {
-        return new TestingConnection(peerId, testGUID).then(connection => {
+        return new TestingRTC(peerId, testGUID).then(rtc => {
             var mediaStartTime;
-            connection.results = Object.assign({peer: peerId}, browserData);
-            return connection.createDataChannel(`${connection.id} => ${connection.peerId}`, {}, {waitForOpen: false})
-                .then(c => connection.initDataChannel(c))
-                .then(_ => testSetupPingBandwidth('data', connection.channel,
-                                                  data => connection.channel.send(data),
-                                                  connection.results))
-                .then(_ => connection.testMedia())
-                .then(_ => connection.peer.getStats())
-                .then(stats => connection.reportMedia(stats))
-                .then(_ => connection.channel.onmessage = null)
+            rtc.results = Object.assign({peer: peerId}, browserData);
+            return rtc.createDataChannel(`${rtc.id} => ${rtc.peerId}`, {}, {waitForOpen: false})
+                .then(c => rtc.initDataChannel(c))
+                .then(_ => testSetupPingBandwidth('data', rtc.channel,
+                                                  data => rtc.channel.send(data),
+                                                  rtc.results))
+                .then(_ => rtc.testMedia())
+                .then(_ => rtc.peer.getStats())
+                .then(stats => rtc.reportMedia(stats))
+                .then(_ => rtc.channel.onmessage = null)
                 .catch(e => console.log('caught', e))
-                .then(_ => connection.p2pSend('close')) // Explicitly tell the RespondingConnection to go away
-                .then(_ => connection.close())
-                .then(_ => report(connection.results));
+                .then(_ => rtc.p2pSend('close')) // Explicitly tell the RespondingRTC to go away
+                .then(_ => rtc.close())
+                .then(_ => report(rtc.results));
         });
     }
     signalingError(type, from, to, response) { // Can be overriden.
@@ -351,7 +351,7 @@ function doAllTests() {
                                                                  sendSseMessage, browserData,
                                                                  !!reinited))
     
-        .then(_ => Promise.all(existingPeers.map(TestingConnection.run)))
+        .then(_ => Promise.all(existingPeers.map(TestingRTC.run)))
     
         .then(results => {
             stream && stream.getTracks().forEach(track => track.stop());
