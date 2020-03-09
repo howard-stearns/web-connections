@@ -6,7 +6,7 @@ A test bed for investigating p2p connectivity between web pages.
 
 Moving now from an initial PoC, towards a _reference implementation_. 
 
-Needs testing/cleanup, and then design/code review. (This is a situation where "we don't know what we don't know", and thus the design is still a bit too "organic".) _**I need to meet with Alan/Jazmine/Jess about the test Web page design.**_
+Needs testing/cleanup, and then design/code review. (This is a situation where "we don't know what we don't know", and thus the design is still a bit too "organic".) _**I need to meet with Alan/Jazmin/Jess about the test Web page design.**_
 
 Soliciting feedback on Recommendations, below.
 
