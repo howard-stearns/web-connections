@@ -16,8 +16,9 @@ var browserData = {
     dchan: dummy && !!dummy.createDataChannel,
     av: navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia,
     audioNode: !!audioContext
-        && !!window.MediaStreamAudioDestinationNode && !!window.ChannelMergerNode
-        && !!new audioContext().createChannelMerger && !!new audioContext().createMediaStreamDestination,
+        && !!window.MediaStreamAudioDestinationNode && !!window.ChannelMergerNode && !!window.AudioWorkletNode
+        && !!new audioContext().createChannelMerger
+        && !!new audioContext().createMediaStreamDestination && !!new audioContext().createMediaStreamSource,
     capture: !!document.createElement('video').captureStream,
     webgl: !!document.createElement('canvas').getContext('webgl'),
     webgl2: !!document.createElement('canvas').getContext('webgl2')
