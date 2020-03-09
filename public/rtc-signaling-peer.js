@@ -58,7 +58,26 @@ class P2pDispatch {
     }
     // Not every subclass connection has a close event that we can attach to for doing cleanup. So instead, clients should
     // call this close method explicitly. (And subclasses will extend this method to close the underlying connection as needed.)
-    close() { }
+    close() {
+        if (!this.connection) return;
+        this.doClose();
+    }
+    closeSharedConnection () { }
+    addToDispatchers() {
+        const id = this.id;
+        const dispatchers = this.constructor.peers[id] = (this.constructor.peers[id] || []);
+        dispatchers.push(this);
+        return dispatchers;
+    }
+    doClose() {
+        const dispatchers = this.constructor.peers[this.id];
+        dispatchers.splice(dispatchers.indexOf(this.connection), 1);
+        if (!dispatchers.length) {
+            delete this.constructor.peers[this.id];
+            this.closeSharedConnection();
+        }
+        this.connection = null;
+    }
 }
 
 // Simplest example, useful for testing two instances IN THE SAME BROWSER. It just keeps a shared dictionary of instances
@@ -66,32 +85,21 @@ class P2pDispatch {
 class LoopbackDispatch extends P2pDispatch {
     constructor(id, receiver) {
         super(id, receiver);
-        const dispatchers = this.constructor.peers[id] = (this.constructor.peers[id] || []);
-        dispatchers.push(this);
+        this.addToDispatchers();
+        this.connection = this;
         return Promise.resolve(this); // Following the rule that the constructor must return a promise that resolves to instance.
     }
     sendObject(messageObject) {
         this.constructor.peers[messageObject.to].forEach(dispatcher => dispatcher.p2pReceive(messageObject));
     }
-    close() {
-        if (!this.id) return;
-        const dispatchers = this.constructor.peers[this.id];
-        dispatchers.splice(dispatchers.indexOf(this), 1);
-        if (!dispatchers.length) delete this.constructor.peers[this.id];
-        this.id = null;
-        super.close();
-    }
 }
 LoopbackDispatch.peers = {};
 
 // Same as LoopbackDispatch, but with a random delay before dispatching.
-class RandomDelayLoopbackDispatch extends P2pDispatch {
-    constructor(id, receiver) {
-        super(id, receiver);
-        const dispatchers = this.constructor.peers[id] = (this.constructor.peers[id] || []);
-        dispatchers.push(this);
+class RandomDelayLoopbackDispatch extends LoopbackDispatch {
+    addToDispatchers() {
         this.messageQueue = []; // Messages are ordered.
-        return Promise.resolve(this);
+        return super.addToDispatchers();
     }
     sendObject(messageObject) {
         // Adds one message to the queue, sets a random timer to FIFO one message out later, but it might not be our message!
@@ -102,17 +110,45 @@ class RandomDelayLoopbackDispatch extends P2pDispatch {
             dispatchers.forEach(dispatcher => dispatcher.p2pReceive(message));
         }, Math.random() * this.constructor.MaxDelayMS); // Edge fails a lot above 150ms.
     }
-    close() {
-        if (!this.id) return;
-        const dispatchers = this.constructor.peers[this.id];
-        dispatchers.splice(dispatchers.indexOf(this), 1);
-        if (!dispatchers.length) delete this.constructor.peers[this.id];
-        this.id = null;
-        super.close();
-    }
 }
 RandomDelayLoopbackDispatch.peers = {}; // Not shared with base class.
 RandomDelayLoopbackDispatch.MaxDelayMS = 100; // See DONE_TO_CLOSE_INTERVAL_MS in unit tests.
+
+// Dispatchers that use a connection to a server, such as a WebSocket or EventSource.
+class ConnectionDispatch extends P2pDispatch {
+    constructor(id, receiver, events, waitForOpen = true) {
+        super(id, receiver);
+        return this.constructor
+            .getConnection(this, waitForOpen)
+            .then(connection => this.initConnection(connection, events));
+    }
+    // Regardless of whethere there is one (WebSocket or EventSource) connection per browser (e.g., regardless of
+    // how many ids are presented in that browser), the server dispatches by message.to string (not message.to
+    // + message.from), so the server must not be asked for more than one connection per message.to id.
+    // Therefore, we must multiplex multiple receiver objects on the same id over a single WebSocket.
+    // We could do this with a single handler that dispatches to the receiver that matches mssage.from,
+    // but currently, we do that by multiple onmessage, 
+    static getConnection1(instance, waitForOpen = true) {
+        const dispatchers = instance.addToDispatchers();
+        if (dispatchers.length > 1) return Promise.resolve(dispatchers[0].connection);
+        return new Promise(resolve => {
+            const connection = this.createInitialConnection(instance.id);
+            if (!waitForOpen) return resolve(connection);
+            connection.onopen = _ => { connection.onopen = null; resolve(connection); };
+        });
+    }
+    initConnection(connection) {
+        this.connection = connection;
+        this.onmessage = event => this.p2pReceive(JSON.parse(event.data));
+    }
+    sendObject(messageObject) {
+        return this.sendString(JSON.stringify(messageObject));
+    }
+    closeSharedConnection() {
+        this.connection.close();
+    }
+}
+
 
 // Dispatches via a WebSocket connection.
 // The expections on the server are:
@@ -135,53 +171,25 @@ wss.on('connection', function (ws, req) {
     ws.on('close', function () { delete wsRegistrants[id]; });
 });
 */
-
-class WebSocketDispatch extends P2pDispatch {
-    constructor(id, receiver, ignoredEvents, waitForOpen = true) {
-        super(id, receiver);
-        return this.constructor.getConnection(this, waitForOpen).then(connection => {
-            this.connection = connection;
-            // add/removeEventListener to connection, rather than preventing applications from using connection.onmessage.
-            this.onmessage = event => this.p2pReceive(JSON.parse(event.data));
-            this.connection.addEventListener('message', this.onmessage);
-            return this;
-        });
+class WebSocketDispatch extends ConnectionDispatch {
+    static createInitialConnection(id) {
+        return new WebSocket(`${WebSocketDispatch.site}/${id}`);
     }
-    // Regardless of whethere there is one WebSocket per browser (e.g., regardless of how many ids are presented in that browser),
-    // the server dispatches by message.to string (not message.to + message.from), so the server must not be asked for
-    // more than one WebSocket connection per message.to id. Therefore, we must multiplex multiple receiver objects on the same
-    // id over a single WebSocket. We could do this with a single handler that dispatches to the receiver that matches mssage.from,
-    // but currently, we do that by multiple onmessage, 
-    static getConnection1(instance, waitForOpen = true) { // create or update connection for new id, returning a promise that resolves when open
-        const id = instance.id;
-        const dispatchers = WebSocketDispatch.peers[id] = (WebSocketDispatch.peers[id] || []);
-        dispatchers.push(instance);
-        if (dispatchers.length > 1) return Promise.resolve(dispatchers[0].connection);
-        return new Promise(resolve => {
-            const connection = new WebSocket(`${WebSocketDispatch.site}/${id}`);
-            if (!waitForOpen) return resolve(connection);
-            connection.onopen = _ => { connection.onopen = null; resolve(connection); };
-        });
+    initConnection(connection) {
+        super.initConnection(connection);
+        this.connection.addEventListener('message', this.onmessage);
+        return this;
     }
-    sendObject(messageObject) {
-        return this.connection.send(JSON.stringify(messageObject));
+    sendString(messageString) {
+        return this.connection.send(messageString);
     }
-    close() {
-        if (!this.connection) return;
+    doClose() {
         this.connection.removeEventListener('message', this.onmessage);
-
-        const dispatchers = this.constructor.peers[this.id];
-        dispatchers.splice(dispatchers.indexOf(this.connection), 1);
-        if (!dispatchers.length) {
-            delete this.constructor.peers[this.id];
-            this.connection.close();
-        }
-        this.connection = null;
-        super.close();
+        super.doClose();
     }
 }
 WebSocketDispatch.site = ((location.protocol === 'https:') ? 'wss:' : 'ws:') + "//" + location.host;
-WebSocketDispatch.getConnection = serializePromises(WebSocketDispatch.getConnection1);
+WebSocketDispatch.getConnection = serializePromises(WebSocketDispatch.getConnection1.bind(WebSocketDispatch));
 WebSocketDispatch.peers = {};
 
 // Dispatches by POSTing to /message, with {from, to, type, data} as the JSON body.
@@ -190,70 +198,46 @@ WebSocketDispatch.peers = {};
 // /messages/<id> remembers that you are at id, and a /message with body {to: id} will be delivered there.
 // One subtle thing is that WebSocket guarantees the order of messages, but (post /message) does not. To make this work,
 // we require that the server not respond to /message (e.g., with 200) until it has actually sent the SSE.
-class EventSourceDispatch extends P2pDispatch {
-    constructor(id, receiver, eventTypes, waitForOpen = true) {
-        super(id, receiver);
+class EventSourceDispatch extends ConnectionDispatch {
+    static createInitialConnection(id) {
+        return new EventSource(`/messages/${id}`);
+    }
+    initConnection(connection, eventTypes) {
+        super.initConnection(connection);
         this.eventTypes = eventTypes;
-        return this.constructor.getConnection(this, waitForOpen).then(connection => {
-            this.connection = connection;
-            // If we simply called fetch(..a..), fetch(..b..), the receiver might
-            // see b before a. By serializing them, we ensure that the server sees AND RESPSONDS to
-            // these in order. (The implementation on the server will deliver a SSE before it responds
-            // to the post.)
-            // Note that a lot of messages (e.g., icecandidate) received just before closing can stack up,
-            // and may be delivered after the other end closes, resulting in logspam as described just below here.
-            this.poster = serializePromises(body => fetch('/message', {
-                method: 'post',
-                headers: {'Content-Type': 'application/json'},
-                body: body
-            }).then(r => { // fetch does not give errors on bad responses, so let's log them here.
-                // Some browsers DO log bad responses in a way that looks like an error but isn't (and
-                // annoyingly, you can't turn this off), but it doesn't give you the url nor the body.
-                if (!r.ok) console.log(`${r.url} got ${r.statusText} when passed ${body}.`);
-                return r;
-            }));
-            // One could imagine the server implementation sending a SSE with the JSON payload as
-            // data, and not specifying any event. Then we could just do
-            //    this.onmessage = event => this.p2pReceive(JSON.parse(event.data));
-            // here, as we do for WebSocketDispatch.
-            // Instead, the current implementation on the server does send the message type as the SSE event,
-            // which means we won't get a generic 'message' event on the EventSource,
-            // but rather a typed event that needs a handler added by addEventListener, and
-            // removed by removeEventListner, below, for each of the expected eventTypes.
-            this.onmessage = event => this.p2pReceive(JSON.parse(event.data));
-            eventTypes.forEach(type => this.connection.addEventListener(type, this.onmessage));
-            return this;
-        });
+        // If we simply called fetch(..a..), fetch(..b..), the receiver might
+        // see b before a. By serializing them, we ensure that the server sees AND RESPSONDS to
+        // these in order. (The implementation on the server will deliver a SSE before it responds
+        // to the post.)
+        // Note that a lot of messages (e.g., icecandidate) received just before closing can stack up,
+        // and may be delivered after the other end closes, resulting in logspam as described just below here.
+        this.sendString = serializePromises(body => fetch('/message', {
+            method: 'post',
+            headers: {'Content-Type': 'application/json'},
+            body: body
+        }).then(r => { // fetch does not give errors on bad responses, so let's log them here.
+            // Some browsers DO log bad responses in a way that looks like an error but isn't (and
+            // annoyingly, you can't turn this off), but it doesn't give you the url nor the body.
+            if (!r.ok) console.log(`${r.url} got ${r.statusText} when passed ${body}.`);
+            return r;
+        }));
+        // One could imagine the server implementation sending a SSE with the JSON payload as
+        // data, and not specifying any event. Then we could just do
+        //     this.connection.addEventListener('message', this.onmessage);
+        // here, as we do for WebSocketDispatch.
+        // Instead, the current implementation on the server does send the message type as the SSE event,
+        // which means we won't get a generic 'message' event on the EventSource,
+        // but rather a typed event that needs a handler added by addEventListener, and
+        // removed by removeEventListner, below, for each of the expected eventTypes.
+        eventTypes.forEach(type => this.connection.addEventListener(type, this.onmessage));
+        return this;
     }
-    static getConnection1(instance, waitForOpen = true) {
-        const id = instance.id;
-        const dispatchers = EventSourceDispatch.peers[id] = (EventSourceDispatch.peers[id] || []);
-        dispatchers.push(instance);
-        if (dispatchers.length > 1) return Promise.resolve(dispatchers[0].connection);
-        return new Promise(resolve => {
-            const connection = new EventSource(`/messages/${id}`);
-            if (!waitForOpen) return resolve(connection);
-            connection.onopen = _ => { connection.onopen = null; resolve(connection); };
-        });
-    }
-    sendObject(messageObject) {
-        return this.poster(JSON.stringify(messageObject));
-    }
-    close() {
-        if (!this.connection) return;
+    doClose() {
         this.eventTypes.forEach(type => this.connection.removeEventListener(type, this.onmessage));
-
-        const dispatchers = this.constructor.peers[this.id];
-        dispatchers.splice(dispatchers.indexOf(this.connection), 1);
-        if (!dispatchers.length) {
-            delete this.constructor.peers[this.id];
-            this.connection.close();
-        }
-        this.connection = null;
-        super.close();
+        super.doClose();
     }
 }
-EventSourceDispatch.getConnection = serializePromises(EventSourceDispatch.getConnection1);
+EventSourceDispatch.getConnection = serializePromises(EventSourceDispatch.getConnection1.bind(EventSourceDispatch));
 EventSourceDispatch.peers = {};
 
 

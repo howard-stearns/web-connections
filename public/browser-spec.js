@@ -132,7 +132,7 @@ describe('browser side', function () {
                         const connection = dispatcherA.connection;
                     dispatcherA.close();
                         expect(dispatcherA.connection).toBeFalsy();
-                        if (connection) {
+                        if (connection.readyState) {
                             expect(connection.onopen).toBe(null);
                             expect(connection.onclose).toBeFalsy(); // Doesn't ever exist on EventSource.
                             expect(connection.onerror).toBe(null);
