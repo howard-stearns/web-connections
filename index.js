@@ -54,7 +54,7 @@ app.post('/upload', function (req, res) {
                 } else {
                     const sinceStart = Date.now() - equivalentStartTimeMs;
                     const accrued = sinceStart * CREDITS_PER_MS;
-                    redis.hset(id, 'credits', Math.round(accrued), error => console.error(error));
+                    redis.hset(id, 'credits', Math.round(accrued), error => error && console.error(error));
                 }
             }
             const data = d.toString();
