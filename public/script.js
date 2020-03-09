@@ -190,7 +190,7 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
     static existingInstance(id) {
         return this.instances[id];
     }
-    // Our event source received an unhandled message from someone who has started signalling with us.
+    // Our event source received an unhandled message from someone who has started signaling with us.
     constructor(message) {
         super(message.from).then(that => {
             console.info('Starting response to', that.peerId);
@@ -231,7 +231,7 @@ class RespondingConnection extends CommonConnection { // If someone is starting 
         super.close();
     }
 }
-RespondingConnection.events = RTCSignallingPeer.events.concat('close');
+RespondingConnection.events = RTCSignalingPeer.events.concat('close');
 RespondingConnection.instances = {};
 
 var testSSE;
@@ -256,7 +256,7 @@ class TestingConnection extends CommonConnection {
                 .then(_ => report(connection.results));
         });
     }
-    signallingError(type, from, to, response) { // Can be overriden.
+    signalingError(type, from, to, response) { // Can be overriden.
         console.error(type, from, to, response.status, response.url, response.statusText);
         this.channel.failReason = (response.status == 404) ? "peer offline" : response.statusText;
         return response;

@@ -14,7 +14,7 @@ function fixme(...args) {
 }
 
 
-// P2P DISPATCHERS: Used by the signalling classes to carry p2p messages.
+// P2P DISPATCHERS: Used by the signaling classes to carry p2p messages.
 
 // Dispatches typed message events to a receiver at a fixed id, but can send to many ids via the p2pSend method.
 // There can be one id with multiple P2pDispatch for different receivers (e.g., that are paired to different peers at different ids).
@@ -260,9 +260,9 @@ EventSourceDispatch.peers = {};
 
 // SIGNALING PEERS: Represents half a peer pair, maintaing an RTCPeerConnection between them.
 
-// Base class for signalling and resignalling of RTCPeerConnection.
-// Subclasses (below) are specialized for different kinds of signalling message carriers.
-class RTCSignallingPeer {
+// Base class for signaling and resignaling of RTCPeerConnection.
+// Subclasses (below) are specialized for different kinds of signaling message carriers.
+class RTCSignalingPeer {
     constructor(ourId, peerId, configuration = null) {
         this.id = ourId;
         this.peerId = peerId;
@@ -327,7 +327,7 @@ class RTCSignallingPeer {
         return this.id < this.peerId;
     }
 
-    // When we add a stream or channel, or conditions change, we get this event to (re)start the signalling process.
+    // When we add a stream or channel, or conditions change, we get this event to (re)start the signaling process.
     negotiationneeded() {
         fixme('negotiationneeded at', this.id,
                     'has pending:', !!this.peerLockPending,
@@ -349,9 +349,9 @@ class RTCSignallingPeer {
                 .then(_ => this.p2pSend('offer', offer));
         });
     }
-    offer(offer) { // Handler for receiving an offer from the other user (who started the signalling process).
-        // Note that during signalling, we will receive negotiationneeded/answer, or offer, but not both, depending
-        // on whether we were the one that started the signalling process.
+    offer(offer) { // Handler for receiving an offer from the other user (who started the signaling process).
+        // Note that during signaling, we will receive negotiationneeded/answer, or offer, but not both, depending
+        // on whether we were the one that started the signaling process.
         fixme('got offer at', this.id);
         const peer = this.peer;
         // If we are the impolite half of a pair, we completely ignore offers that come in while we are negotiating.
@@ -366,7 +366,7 @@ class RTCSignallingPeer {
             .then(answer => peer.setLocalDescription(answer)) // promise does not resolve to answer
             .then(_ => this.p2pSend('answer', peer.localDescription));
     }
-    answer(answer) { // Handler for finishing the signalling process that we started.
+    answer(answer) { // Handler for finishing the signaling process that we started.
         this.peer.setRemoteDescription(answer);
     }
 
@@ -418,7 +418,7 @@ class RTCSignallingPeer {
     //   After we return to stable, body is resolved automatically.
     // - Otherwise, a timer is started WHEN WE REQUEST THE LOCK FROM THE PEER (not when we are waiting our turn to run).
     //   When this goes off, the body is rejected.
-    // The mutex exists only between the two pairs. It does not effect other RTCSignallingPeers, even in the same browser.
+    // The mutex exists only between the two pairs. It does not effect other RTCSignalingPeers, even in the same browser.
     acquireLock(body, timeoutMs = 5000, stableResolutionDelayMs = 1) {
         var timeout, onStateChange, result, delay;
         fixme('attempting to acquireLock at', this.id);
@@ -463,11 +463,11 @@ class RTCSignallingPeer {
         }
     }
 }
-RTCSignallingPeer.events = ['icecandidate', 'offer', 'answer', 'lockRequest', 'lockResponse', 'gotTrack'];
+RTCSignalingPeer.events = ['icecandidate', 'offer', 'answer', 'lockRequest', 'lockResponse', 'gotTrack'];
 
 // As an example of use, here's a subclass where both peers have to be in the same browser, and 
 // p2pSend just passes the data directly to the other peer. Real-world subclasses are below.
-class LoopbackRTC extends RTCSignallingPeer { }
+class LoopbackRTC extends RTCSignalingPeer { }
 LoopbackRTC.dispatchClass = LoopbackDispatch;
 
 // Same, but with a srandom signaling delay.
@@ -476,11 +476,11 @@ RandomDelayLoopbackRTC.dispatchClass = RandomDelayLoopbackDispatch;
 
 
 /*
-Signalling over WebSockets:
+Signaling over WebSockets:
 
-WebSocket makes logical sense for signalling, but the word on the Web seems to be that it does not scale well.
+WebSocket makes logical sense for signaling, but the word on the Web seems to be that it does not scale well.
 1. Client is limited to about 200 WebSockets per server/page (browser-specific). This implementation works around
-   that by multiplexing communications for all RTCSignallingPeer instances over a single WebSocket per page,
+   that by multiplexing communications for all RTCSignalingPeer instances over a single WebSocket per page,
    rather than having the page open a socket for each RTCSignllingPeer that it will interact with.
 2. Server is limited to about 1000 WebSockets. Since either client of a pair might need to resignal, both ends
    have to keep their WebSockets open the whole time that they use the RTCPeerConnection, even if there is no
@@ -496,16 +496,16 @@ WebSocket makes logical sense for signalling, but the word on the Web seems to b
 Thus WebSockets may ultimately be a dead end in industry. Nonetheless, they're familiar, so the following provides a sample
 client use. 
 */
-class WebSocketRTC extends RTCSignallingPeer { }
+class WebSocketRTC extends RTCSignalingPeer { }
 WebSocketRTC.dispatchClass = WebSocketDispatch;
 
-// Signalling with ordinary GET to send messages, and Server-Side Events to receive them.
-class EventSourceRTC extends RTCSignallingPeer {
+// Signaling with ordinary GET to send messages, and Server-Side Events to receive them.
+class EventSourceRTC extends RTCSignalingPeer {
     //fixme
-    signallingError(type, from, to, response) { // Can be overriden.
-        // Handle an asynchronous communication error during signalling (e.g., from p2pSend)
+    signalingError(type, from, to, response) { // Can be overriden.
+        // Handle an asynchronous communication error during signaling (e.g., from p2pSend)
         // Note that Chrome will report 404 from fetch in the console as if by console.error, without
-        // actually signalling an error. (The spec says no error is signalled, but it doesn't prevent
+        // actually signaling an error. (The spec says no error is signalled, but it doesn't prevent
         // Chrome from being annoying noisy about it. See
         // https://stackoverflow.com/questions/4500741/suppress-chrome-failed-to-load-resource-messages-in-console/30847631#30847631
         console.error(type, from, to, response.status, response.url, response.statusText);
