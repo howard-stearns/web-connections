@@ -18,7 +18,9 @@ var browserData = {
     audioNode: !!audioContext
         && !!window.MediaStreamAudioDestinationNode && !!window.ChannelMergerNode
         && !!new audioContext().createChannelMerger && !!new audioContext().createMediaStreamDestination,
-    capture: !!dummyVideo.captureStream
+    capture: !!document.createElement('video').captureStream,
+    webgl: !!document.createElement('canvas').getContext('webgl'),
+    webgl2: !!document.createElement('canvas').getContext('webgl2')
 }
 dummy = null;
 
@@ -125,7 +127,7 @@ function report(data) {
 
 Object.keys(browserData).forEach(function (key) {
     document.getElementById(key).checked = browserData[key];
-    if (!browserData[key] && ['av', 't2s', 's2t', 'audioNode', 'capture'].indexOf(key) < 0) {
+    if (!browserData[key] && ['av', 't2s', 's2t', 'audioNode', 'capture', 'webgl', 'webgl2'].indexOf(key) < 0) {
         FAILED = true;
         browserData.concurrency = browserData.concurrency || 'missing:';
         browserData.concurrency += ' ' + key;
