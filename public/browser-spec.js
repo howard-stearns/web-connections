@@ -24,13 +24,30 @@ const CONFIGURATION = {
     ]
 };
 
-
+var masterStream, resolver;
+const capture = videoElement.captureStream || videoElement.mozCaptureStream;
 describe('browser side', function () {
     const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
     const wsSite = protocol + "//" + location.host;
-    beforeAll(function (done) { // Give puppeteer a chance to hook into reporters.
-        setTimeout(_ => done(), 1000);
-    });
+    beforeAll(function (done) { // Give user a chance to push the startButton
+        if (!!capture) {
+            startButton.style.display = "block";
+            startButton.onclick = function () {
+                videoElement.play();
+                masterStream = capture.call(videoElement);
+                resolver();
+            };
+            resolver = done;
+        } else if (!navigator.mediaDevices) {
+            done();
+        } else {
+            navigator.mediaDevices
+                .getUserMedia({audio: true, video: true})
+                .catch(_ => null)
+                .then(mediaStream => masterStream = mediaStream)
+                .then(done);
+        }
+    }, 10 * 1000);
     var idA, idB;
     beforeEach(function () {
         idA = uuidv4(Math.random() < 0.5 ? 'A' : 'C'); // One is "polite" relatibe to idB, the other not.
@@ -380,15 +397,7 @@ describe('browser side', function () {
                         });
                     });
                     describe('media', function () {
-                        var stream = null, masterStream = null;
-                        beforeAll(function (done) {
-                            if (!navigator.mediaDevices) return done();
-                            navigator.mediaDevices
-                                .getUserMedia({video: true, audio: true})
-                                .catch(_ => null)
-                                .then(mediaStream => masterStream = mediaStream)
-                                .then(done);
-                        });
+                        var stream = null
                         beforeEach(function () {
                             stream = masterStream && masterStream.clone();
                         });
@@ -407,6 +416,7 @@ describe('browser side', function () {
                         it('can send media', function (done) {
                             if (!checkStream(done)) return;
                             var nTracks = stream.getTracks().length;
+                            expect(nTracks).toBe(2);
                             Promise.all([
                                 rtcA.addStream(stream),
                                 new Promise(resolve => {
@@ -424,6 +434,7 @@ describe('browser side', function () {
                             if (!checkStream(done)) return;
                             const stream2 = stream.clone();
                             var n1 = stream.getTracks().length, n2 = stream2.getTracks().length;
+                            expect(n2).toBe(2);
                             Promise.all([
                                 new Promise(resolve => rtcA.peer.ontrack = e => {if (--n2 <= 0) resolve(e);}),
                                 new Promise(resolve => rtcB.peer.ontrack = e => {if (--n1 <= 0) resolve(e);}),
