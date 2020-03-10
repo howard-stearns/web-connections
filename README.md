@@ -44,16 +44,25 @@ However, as people come to face various design choices, it might pay to make tho
 
 8. How will the signaling scale on servers? While there seems to be a lot of evidence that the "big boys" are using SSE rather than WS for big connected apps, I don't think anyone can afford 10-100 M always-on connections of either. _**I think that ultimately we'll need some sort of overlay gossip network built on those of our peers that are online.**_ Best practice is to clearly spearate the functionality of the signaling mechanism, and be able to re-run tests to prove it works.
 
-## Performance
-Recent versions of all modern major browsers (including mobile, but not including Internet Explorer) appear to support all the checked-for features, except:
+## Data
 
-- Edge doesn't yet officially support data channels. The code is actually all there, but not completely reliable. The reference implementation makes an attempt to work around this, but it still intermittently fails.
-- Only Chrome has Speech-to-Text (and, outside of this project, I happen to know that on Android it annoyingly beeps whenever it starts listening for input).
-- Safari does not support captureStream.
-- _**I need to get lists from Sam and Chris for feature detection reporting.**_
+**What's Missing:** (in modern browsers, including mobile but not Internet Explorer):
+
+| what                        | where                            | % users | notes |
+|----------------------------:|:---------------------------------|:-------:|-------|
+| **data channels**           | Edge (intermittent)              | TBD!    |       |
+| **TURN required**           | cellular? TBD!                   | TBD!    |       |
+| **_any_ other RTC failure** | TBD!                             | TBD!    |       |
+| **Speech-to-Text**          | missing everywhere except Chrome | TBD!    | Android chrome beeps annoyingly at start of capture|
+| **captureStream**           | Safari                           | TBD!    |       |
 
 
-Very rough typical figures (averaged by eye over a small sample):
+_**I need to get lists from Sam and Chris for feature detection reporting.**_
+
+_**TBD: What data is meaningful as to how many people contribute how much computing time?**_
+
+
+**Performance:** Very rough typical figures (averaged by eye over a small sample):
 
 |                    |setup (ms)  | ping (ms) | bandwidth (kb/s)            |
 |-------------------:|:----------:|:---------:|:---------------------------:|
