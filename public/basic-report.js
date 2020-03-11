@@ -14,7 +14,7 @@ var browserData = {
     t2s: !!window.speechSynthesis,
     rtc: !!window.RTCPeerConnection,
     dchan: dummy && !!dummy.createDataChannel,
-    av: navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia,
+    av: !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia,
     audioNode: !!audioContext
         && !!window.MediaStreamAudioDestinationNode && !!window.ChannelMergerNode && !!window.AudioWorkletNode
         && !!new audioContext().createChannelMerger
