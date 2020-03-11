@@ -61,17 +61,17 @@ var existingPeers = [], stream;
 const RTC_CONFIGURATION = {
     iceServers: [
         {urls: [
-            "stun:stun.l.google.com:19302",
+            "stun:turn.highfidelity.com:3478"
+            //"stun:stun.l.google.com:19302",
+            //"stun:ice.highfidelity.com"
             //"stun:stun.voiparound.com",
             //"stun:stun.voipbuster.com",
             //"stun:stun.ideasip.com",
             //"stun:stun.ekiga.net",
             //"stun:stun.xten.com"
-            //"stun:ice.highfidelity.com"
         ]},
-        {urls: 'turn:numb.viagenie.ca',
-         credential: 'muazkh',
-         username: 'webrtc@live.com'}
+        {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
+        //, {urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'}
     ]
 };
 

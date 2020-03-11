@@ -14,13 +14,13 @@ function debug(...args) {
 
 const CONFIGURATION = {
     iceServers: [
-        //{urls: 'stun:ice.highfidelity.com'},
         {urls: [
-            "stun:stun.l.google.com:19302",
+            'stun:turn.highfidelity.com:3478'
+            //'stun:stun.l.google.com:19302'
+            //'stun:ice.highfidelity.com'
         ]},
-        {urls: 'turn:numb.viagenie.ca',
-         credential: 'muazkh',
-         username: 'webrtc@live.com'}
+        {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
+        // {urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh'}
     ]
 };
 
