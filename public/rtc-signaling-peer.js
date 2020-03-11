@@ -258,14 +258,8 @@ class RTCSignalingPeer {
         // But Safari gets errors either way.
         this.onicecandidate = event => event.candidate && event.candidate.candidate
             && this.p2pSend('icecandidate', event.candidate);
-        // Support unknown. Can be overridden, of course.
-        this.onicecandidateerror = event => {
-            // STUN errors are in the range 300-699. See RFC 5389, section 15.6
-            // for a list of codes. TURN adds a few more error codes; see
-            // RFC 5766, section 15 for details.
-            // Server could not be reached are in the range 700-799.
-            console.error('ice code:', event.errorCode, event);
-        };
+        // I don't think anyone actually signals this. Instead, they reject from addIceCandidate.
+        this.onicecandidateerror = event => this.icecandidateerror(event);
         peer.addEventListener('negotiationneeded', this.onnegotiationneeded);
         peer.addEventListener('icecandidate', this.onicecandidate);
         peer.addEventListener('icecandidateerror', this.onicecandidateerror);
@@ -280,6 +274,20 @@ class RTCSignalingPeer {
             this.p2pDispatcher = dispatch;
             return this;
         });
+    }
+    icecandidateerror(eventOrException) { // For errors on this peer during gathering.
+        // Can be overridden or extended by applications.
+
+        // STUN errors are in the range 300-699. See RFC 5389, section 15.6
+        // for a list of codes. TURN adds a few more error codes; see
+        // RFC 5766, section 15 for details.
+        // Server could not be reached are in the range 700-799.
+        console.error('ice error:',
+                      eventOrException.errorCode || eventOrException.code, // Deprecated, but still useful.
+                      eventOrException.name, eventOrException.message);
+    }
+    negotiationneedederror(exception) { // For errors in how this peer handles negotiationneeded.
+        console.error('negotiationneeded error:', exception.name, exception.message);
     }
     p2pSend(type, message) {
         return this.p2pDispatcher.p2pSend(this.peerId, type, message);
@@ -296,7 +304,7 @@ class RTCSignalingPeer {
     }
 
     icecandidate(iceCandidate) { // We have been signalled by the other end about a new candidate.
-        this.peer.addIceCandidate(iceCandidate).catch(console.error)
+        this.peer.addIceCandidate(iceCandidate).catch(error => this.icecandidateerror(error));
     }
     inRace() { // When checked within negotiationneeded or offer handlers, indicates that we are already negotiating.
         // See https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
@@ -326,12 +334,14 @@ class RTCSignalingPeer {
         }
         const peer = this.peer;
         if (this.inRace()) return; // It is possible to have this queued after an offer
-        peer.createOffer().then(offer => {
-            if (this.inRace()) return; // We might have set a remote offer while creating our own.
-            peer.setLocalDescription(offer) // promise does not resolve to offer
-                .then(_ => fixme('sending offer at', this.id))
-                .then(_ => this.p2pSend('offer', offer));
-        });
+        peer.createOffer()
+            .then(offer => {
+                if (this.inRace()) return; // We might have set a remote offer while creating our own.
+                peer.setLocalDescription(offer) // promise does not resolve to offer
+                    .then(_ => fixme('sending offer at', this.id))
+                    .then(_ => this.p2pSend('offer', offer));
+            })
+            .catch(error => this.negotiationneedederror(error));
     }
     offer(offer) { // Handler for receiving an offer from the other user (who started the signaling process).
         // Note that during signaling, we will receive negotiationneeded/answer, or offer, but not both, depending
