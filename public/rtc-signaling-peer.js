@@ -36,7 +36,6 @@ class P2pDispatch {
         // The data is anything that can be serialized as JSON (i.e., does not have to be pre-serialized).
         // The type argument is a string that names a method on the receiver that has an id specified by to.
         return this.sendObject({from: this.id, to, data, type});
-        // FIXME: error handling!
     }
     p2pReceive(messageObject) {
         // Subclasses call this to receive a  string over the connection. The method specified by the message
@@ -90,7 +89,9 @@ class LoopbackDispatch extends P2pDispatch {
         return Promise.resolve(this); // Following the rule that the constructor must return a promise that resolves to instance.
     }
     sendObject(messageObject) {
-        this.constructor.peers[messageObject.to].forEach(dispatcher => dispatcher.p2pReceive(messageObject));
+        if (!this.connection) return Promise.resolve();
+        return Promise.all(this.constructor.peers[messageObject.to]
+                           .map(dispatcher => Promise.resolve(dispatcher.p2pReceive(messageObject))));
     }
 }
 LoopbackDispatch.peers = {};
@@ -103,12 +104,11 @@ class RandomDelayLoopbackDispatch extends LoopbackDispatch {
     }
     sendObject(messageObject) {
         // Adds one message to the queue, sets a random timer to FIFO one message out later, but it might not be our message!
-        this.messageQueue.unshift(messageObject);
-        setTimeout(_ => {
-            const message = this.messageQueue.pop();
-            const dispatchers = this.constructor.peers[message.to]
-            dispatchers.forEach(dispatcher => dispatcher.p2pReceive(message));
-        }, Math.random() * this.constructor.MaxDelayMS); // Edge fails a lot above 150ms.
+        return new Promise(resolve => {
+            this.messageQueue.unshift(messageObject);
+            setTimeout(_ => resolve(super.sendObject(this.messageQueue.pop())),
+                       Math.random() * this.constructor.MaxDelayMS); // Edge fails a lot above 150ms.
+        });
     }
 }
 RandomDelayLoopbackDispatch.peers = {}; // Not shared with base class.
@@ -180,8 +180,12 @@ class WebSocketDispatch extends ConnectionDispatch {
         this.connection.addEventListener('message', this.onmessage);
         return this;
     }
-    sendString(messageString) {
-        return this.connection.send(messageString);
+    sendString(messageString) {  // Return a promise.
+        try {
+            return Promise.resolve(this.connection.send(messageString));
+        } catch(e) {
+            return Promise.reject(e);
+        }
     }
     doClose() {
         this.connection.removeEventListener('message', this.onmessage);
@@ -215,10 +219,11 @@ class EventSourceDispatch extends ConnectionDispatch {
             method: 'post',
             headers: {'Content-Type': 'application/json'},
             body: body
-        }).then(r => { // fetch does not give errors on bad responses, so let's log them here.
+        }).then(r => { // fetch does not give errors on bad responses, so let's reject them here,
+            // so that handlers can do what they want with the rejection, such as logging it.
             // Some browsers DO log bad responses in a way that looks like an error but isn't (and
             // annoyingly, you can't turn this off), but it doesn't give you the url nor the body.
-            if (!r.ok) console.log(`${r.url} got ${r.statusText} when passed ${body}.`);
+            if (!r.ok) return Promise.reject(r);
             return r;
         }));
         // One could imagine the server implementation sending a SSE with the JSON payload as
@@ -247,10 +252,11 @@ EventSourceDispatch.peers = {};
 // Base class for signaling and resignaling of RTCPeerConnection.
 // Subclasses (below) are specialized for different kinds of signaling message carriers.
 class RTCSignalingPeer {
-    constructor(ourId, peerId, configuration = null) {
+    constructor(ourId, peerId, rtcConfiguration = {}, {onerror} = {}) {
         this.id = ourId;
         this.peerId = peerId;
-        const peer = this.peer = new RTCPeerConnection(configuration);
+        this.onerror = onerror || (() => {});
+        const peer = this.peer = new RTCPeerConnection(rtcConfiguration);
 
         // We use add/removeEventListener so that applications are free to use peer.onMumble.
         this.onnegotiationneeded = _ => this.negotiationneeded();
@@ -275,6 +281,11 @@ class RTCSignalingPeer {
             return this;
         });
     }
+    logError(label, eventOrException) {
+        const data = this.constructor.gatherErrorData(label, eventOrException);
+        console.error.apply(console, data);
+        this.onerror.apply(null, data);
+    }
     icecandidateerror(eventOrException) { // For errors on this peer during gathering.
         // Can be overridden or extended by applications.
 
@@ -282,15 +293,20 @@ class RTCSignalingPeer {
         // for a list of codes. TURN adds a few more error codes; see
         // RFC 5766, section 15 for details.
         // Server could not be reached are in the range 700-799.
-        console.error('ice error:',
-                      eventOrException.errorCode || eventOrException.code, // Deprecated, but still useful.
-                      eventOrException.name, eventOrException.message);
+        this.logError('ice', eventOrException);
     }
     negotiationneedederror(exception) { // For errors in how this peer handles negotiationneeded.
-        console.error('negotiationneeded error:', exception.name, exception.message);
+        this.logError('negotiationneeded', exception);
+    }
+    signalingError(exception) { // For errors in either sending or receiving signaling messages, except as covered above.
+        // Note that Chrome will report 404 from fetch in the console as if by console.error, without
+        // actually signaling an error. (The spec for fetch says no error is signalled on 404, but it doesn't prevent
+        // Chrome from being annoying noisy about it. See
+        // https://stackoverflow.com/questions/4500741/suppress-chrome-failed-to-load-resource-messages-in-console/30847631#30847631
+        this.logError('signaling', exception);
     }
     p2pSend(type, message) {
-        return this.p2pDispatcher.p2pSend(this.peerId, type, message);
+        return this.p2pDispatcher.p2pSend(this.peerId, type, message).catch(e => this.signalingError(e));
     }
     // Not all RTCPeerConnection implementations fire connectionstatechange or other indication of closure.
     close() { // So applications should explicitly call this to allow cleanup.
@@ -458,6 +474,12 @@ class RTCSignalingPeer {
     }
 }
 RTCSignalingPeer.events = ['icecandidate', 'offer', 'answer', 'lockRequest', 'lockResponse', 'gotTrack'];
+RTCSignalingPeer.gatherErrorData = (label, eventOrException) =>
+    [label + " error:",
+     eventOrException.code || eventOrException.errorCode || eventOrException.status || "", // First is deprecated, but still useful.
+     eventOrException.url || eventOrException.name,
+     eventOrException.message || eventOrException.errorText || eventOrException.statusText || eventOrException];
+
 
 // As an example of use, here's a subclass where both peers have to be in the same browser, and 
 // p2pSend just passes the data directly to the other peer. Real-world subclasses are below.
@@ -494,16 +516,5 @@ class WebSocketRTC extends RTCSignalingPeer { }
 WebSocketRTC.dispatchClass = WebSocketDispatch;
 
 // Signaling with ordinary GET to send messages, and Server-Side Events to receive them.
-class EventSourceRTC extends RTCSignalingPeer {
-    //fixme
-    signalingError(type, from, to, response) { // Can be overriden.
-        // Handle an asynchronous communication error during signaling (e.g., from p2pSend)
-        // Note that Chrome will report 404 from fetch in the console as if by console.error, without
-        // actually signaling an error. (The spec says no error is signalled, but it doesn't prevent
-        // Chrome from being annoying noisy about it. See
-        // https://stackoverflow.com/questions/4500741/suppress-chrome-failed-to-load-resource-messages-in-console/30847631#30847631
-        console.error(type, from, to, response.status, response.url, response.statusText);
-        return response;
-    }
-}
+class EventSourceRTC extends RTCSignalingPeer { }
 EventSourceRTC.dispatchClass = EventSourceDispatch;

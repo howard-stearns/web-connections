@@ -22,7 +22,22 @@ const CONFIGURATION = {
         {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
         // {urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh'}
     ]
+    , iceTransportPolicy: 'relay'
 };
+
+
+var currentSpecName;
+jasmine.getEnv().addReporter({
+    specStarted: function (spec) {
+        currentSpecName = spec.fullName;
+    }
+});
+function showError(label, code, name, message) {
+    const string = [currentSpecName, label, code, name, message].join(' ');
+    const div = document.createElement('div');
+    div.innerHTML = string;
+    errors.appendChild(div);
+}
 
 var masterStream, resolver;
 const capture = videoElement.captureStream || videoElement.mozCaptureStream;
@@ -144,9 +159,7 @@ describe('browser side', function () {
                     });
                 });
                 it('leaves nothing behind (and close can be called more than once)', function (done) {
-                    //const receiver = {};
-                    //new dispatcherClass(idA, receiver, events).then(dispatcher => {
-                        const connection = dispatcherA.connection;
+                    const connection = dispatcherA.connection;
                     dispatcherA.close();
                         expect(dispatcherA.connection).toBeFalsy();
                         if (connection.readyState) {
@@ -175,8 +188,8 @@ describe('browser side', function () {
                 var rtcA, rtcB;
                 beforeEach(function (done) {
                     Promise.all([ // Wait for open before starting tests.
-                        (new peerClass(idA, idB)).then(a => rtcA = a),
-                        (new peerClass(idB, idA)).then(b => rtcB = b)
+                        (new peerClass(idA, idB, CONFIGURATION, {onerror: showError})).then(a => rtcA = a),
+                        (new peerClass(idB, idA, CONFIGURATION, {onerror: showError})).then(b => rtcB = b)
                     ]).then(done);
                 });
                 afterEach(function (done) {
@@ -205,11 +218,11 @@ describe('browser side', function () {
                     }
                     function resolves(resolve) {
                         setTimeout(_ => resolve(1), pauseMs);
-			return 1;
+			            return 1;
                     }
                     function rejects(_, reject) {
                         setTimeout(_ => reject(99), pauseMs);
-			return 1;
+			            return 1;
                     }
                     describe('acquire and releases', function () {
                         it('with waiting', function (done) {
