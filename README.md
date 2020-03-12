@@ -93,6 +93,12 @@ RTCSignalingPeer#**close**() => Should be explicitly called by the application t
 
 RTCSignalingPeer#**peer** => The RTCPeerConnection.
 
+RTCSignalingPeer#**icecandidateError**(eventOrException) - Called when there is an error gathering ice candidates on this peer.
+RTCSignalingPeer#**negotiationneededError**(exception) - Called when there is an error handling negotiationneeded on this peer.
+RTCSignalingPeer#**signalingError**(exception) - Called when there is any other error error during signaling on this peer.
+RTCSignalingPeer#**logError**(exception) - The default for all the above calls this. The default of this calls console.error.
+
+
 ## Internal/Implementation API
 
 _**FIXME**: acquireLock (anti-glare), underlying signaling channel protocol, getting a listing of available peers, mechanism to detect disconnect and reconnect, mechanism to handle versioning, ..._

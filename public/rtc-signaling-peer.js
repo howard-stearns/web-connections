@@ -265,7 +265,7 @@ class RTCSignalingPeer {
         this.onicecandidate = event => event.candidate && event.candidate.candidate
             && this.p2pSend('icecandidate', event.candidate);
         // I don't think anyone actually signals this. Instead, they reject from addIceCandidate.
-        this.onicecandidateerror = event => this.icecandidateerror(event);
+        this.onicecandidateerror = event => this.icecandidateError(event);
         peer.addEventListener('negotiationneeded', this.onnegotiationneeded);
         peer.addEventListener('icecandidate', this.onicecandidate);
         peer.addEventListener('icecandidateerror', this.onicecandidateerror);
@@ -287,7 +287,7 @@ class RTCSignalingPeer {
         this.onerror.apply(null, data);
         return data;
     }
-    icecandidateerror(eventOrException) { // For errors on this peer during gathering.
+    icecandidateError(eventOrException) { // For errors on this peer during gathering.
         // Can be overridden or extended by applications.
 
         // STUN errors are in the range 300-699. See RFC 5389, section 15.6
@@ -296,7 +296,7 @@ class RTCSignalingPeer {
         // Server could not be reached are in the range 700-799.
         this.logError('ice', eventOrException);
     }
-    negotiationneedederror(exception) { // For errors in how this peer handles negotiationneeded.
+    negotiationneededError(exception) { // For errors in how this peer handles negotiationneeded.
         this.logError('negotiationneeded', exception);
     }
     signalingError(exception) { // For errors in either sending or receiving signaling messages, except as covered above.
@@ -321,7 +321,7 @@ class RTCSignalingPeer {
     }
 
     icecandidate(iceCandidate) { // We have been signalled by the other end about a new candidate.
-        this.peer.addIceCandidate(iceCandidate).catch(error => this.icecandidateerror(error));
+        this.peer.addIceCandidate(iceCandidate).catch(error => this.icecandidateError(error));
     }
     inRace() { // When checked within negotiationneeded or offer handlers, indicates that we are already negotiating.
         // See https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
@@ -358,7 +358,7 @@ class RTCSignalingPeer {
                     .then(_ => fixme('sending offer at', this.id))
                     .then(_ => this.p2pSend('offer', offer));
             })
-            .catch(error => this.negotiationneedederror(error));
+            .catch(error => this.negotiationneededError(error));
     }
     offer(offer) { // Handler for receiving an offer from the other user (who started the signaling process).
         // Note that during signaling, we will receive negotiationneeded/answer, or offer, but not both, depending
