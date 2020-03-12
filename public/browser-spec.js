@@ -15,14 +15,14 @@ function debug(...args) {
 const CONFIGURATION = {
     iceServers: [
         {urls: [
-            'stun:turn.highfidelity.com:3478'
-            //'stun:stun.l.google.com:19302'
+            //'stun:turn.highfidelity.com:3478'
+            'stun:stun.l.google.com:19302'
             //'stun:ice.highfidelity.com'
         ]},
-        {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
-        // {urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh'}
+        //{urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
+        {urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh'}
     ]
-    , iceTransportPolicy: 'relay'
+    //, iceTransportPolicy: 'relay'
 };
 
 
@@ -41,13 +41,15 @@ function showError(label, code, name, message) {
 
 var masterStream, resolver;
 const capture = videoElement.captureStream || videoElement.mozCaptureStream;
-describe('browser side', function () {
+describe('Browser', function () {
     const protocol = (location.protocol === 'http:') ? 'ws:' : 'wss:';
     const wsSite = protocol + "//" + location.host;
     beforeAll(function (done) { // Give user a chance to push the startButton
         if (!!capture) {
             startButton.style.display = "block";
             startButton.onclick = function () {
+                videoElement.loop = true;
+                videoElement.muted = false;
                 videoElement.play();
                 masterStream = capture.call(videoElement);
                 resolver();
@@ -63,6 +65,9 @@ describe('browser side', function () {
                 .then(done);
         }
     }, 10 * 1000);
+    afterAll(function () {
+        videoElement.pause();
+    });
     var idA, idB;
     beforeEach(function () {
         idA = uuidv4(Math.random() < 0.5 ? 'A' : 'C'); // One is "polite" relatibe to idB, the other not.
