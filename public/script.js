@@ -73,6 +73,7 @@ const RTC_CONFIGURATION = {
         //{urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
         {urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'}
     ]
+    //, iceTransportPolicy: 'relay'
 };
 
 function updateTestingMessage() {
@@ -256,10 +257,9 @@ class TestingRTC extends CommonRTC {
                 .then(_ => report(rtc.results));
         });
     }
-    signalingError(type, from, to, response) { // Can be overriden.
-        console.error(type, from, to, response.status, response.url, response.statusText);
-        this.channel.failReason = (response.status == 404) ? "peer offline" : response.statusText;
-        return response;
+    logError(shortLabel, error) {
+        const [label, code, name, message] = super.logError(shortLabel, error);
+        this.channel.failReason = (code == 404) ? "peer offline" : [label, name, message].join(' ');
     }
     testMedia() {
         const nTracksKey = 'nTracks';

@@ -285,6 +285,7 @@ class RTCSignalingPeer {
         const data = this.constructor.gatherErrorData(label, eventOrException);
         console.error.apply(console, data);
         this.onerror.apply(null, data);
+        return data;
     }
     icecandidateerror(eventOrException) { // For errors on this peer during gathering.
         // Can be overridden or extended by applications.
