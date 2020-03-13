@@ -467,7 +467,7 @@ class RTCSignalingPeer {
         }
     }
 }
-RTCSignalingPeer.events = ['icecandidate', 'offer', 'answer', 'lockRequest', 'lockResponse', 'gotTrack'];
+RTCSignalingPeer.events = ['icecandidate', 'offer', 'answer', 'lockRequest', 'lockResponse'];
 RTCSignalingPeer.gatherErrorData = (label, eventOrException) =>
     [label + " error:",
      eventOrException.code || eventOrException.errorCode || eventOrException.status || "", // First is deprecated, but still useful.

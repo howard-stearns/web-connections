@@ -6,23 +6,26 @@
 // Communications:
 
 
-var ourCurrentVersion, pingTimer, homeLine;
+var ourCurrentVersion, homeLine;
 function sendSseMessage(data, type) { return homeLine.p2pSend(guid, type, data); }
-const PING_TIMEOUT_MS = 15 * 1000;
 function initEventSource() {
     // Server will timeout the connection, but a reload produce confusing results unless we play nice.
     function closeEventSource() {
+        console.info('closing event source');
         clearTimeout(pingTimer);
         if (homeLine) homeLine.close();
         homeLine = null;
     }
-    function ping(data) {
+    var pingTimer;
+    function ping(timeout) {
         clearTimeout(pingTimer);
         pingTimer = setTimeout(_ => {
-            console.warn('No SSE ping from server.');
-            /* FIXME! closeEventSource();
-            setTimeout(initEventSource, 3000);*/
-        }, PING_TIMEOUT_MS);
+            console.warn(`No SSE ping from server in ${timeout} ms.`);
+            closeEventSource();
+            const reInitMs = 30 * 1000;
+            setTimeout(initEventSource, reInitMs);
+            setRetest(2 * reInitMs);
+        }, 1.5 * timeout);
         sendSseMessage(undefined, 'pong').catch(console.log);
     }
     // We will immediately be given a listing of currently connected peers. Save it for later
@@ -338,6 +341,11 @@ class TestingRTC extends CommonRTC {
 
 const RETEST_INTERVAL_MS = 30 * 60 * 1000; // Every half hour
 var retestTimer;
+function setRetest(interval = RETEST_INTERVAL_MS) {
+    clearTimeout(retestTimer);
+    retestTimer = setTimeout(doAllTests, interval);
+    nextScheduled.innerHTML = new Date(Date.now() + interval).toLocaleTimeString();
+}
 function doAllTests() {
     start.disabled = true;
     nextScheduled.innerHTML = "in progress";
@@ -367,9 +375,8 @@ function doAllTests() {
         .then(results => {
             stream && stream.getTracks().forEach(track => track.stop());
             console.info(`Completed ${results.length} peer tests.`);
-            retestTimer = setTimeout(doAllTests, RETEST_INTERVAL_MS);
+            setRetest();
             if (!results.length) report(browserData);
-            nextScheduled.innerHTML = new Date(Date.now() + RETEST_INTERVAL_MS).toLocaleTimeString();
             userMessages.innerHTML = "Testing is complete. If you can,"
                 + " <b>please leave this page up</b> so that we can automatically retest periodically,"
                 + " and so other people can test with you at higher concurrency.";

@@ -50,6 +50,7 @@ describe('Browser', function () {
             startButton.onclick = function () {
                 videoElement.loop = true;
                 videoElement.muted = false;
+                videoElement.volume = 0.0;
                 videoElement.play();
                 masterStream = capture.call(videoElement);
                 resolver();

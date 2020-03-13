@@ -99,7 +99,7 @@ function heartbeatSSE(res, comment = '') { // (posibly empty) comment forces ope
     if (HEARTBEAT_IS_PING_PONG) {
         if (res.gotPong === false) { // undefined doesn't count
             console.info(`${new Date()}: No pong from ${res.guid} (${res.gotPong}), closing.`);
-            return // FIXME! closeRegistrant(res); // We didn't get a pong from last ping. Kill 'em.
+            return closeRegistrant(res); // We didn't get a pong from last ping. Kill 'em.
         }
         res.gotPong = false;
         sendSSE(res, JSON.stringify({type:'ping', to:res.guid, from:res.guid, data:HEROKU_PROXY_TIMEOUT_MS}), 'ping');
