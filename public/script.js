@@ -82,7 +82,7 @@ function updateTestingMessage() {
     if (browserData.concurrency) {
         const peers = browserData.concurrency === 1 ? "1 peer" : "" + browserData.concurrency + " peers";
         message += "among " + peers + "... It will be at least "
-            + MEDIA_RUNTIME_SECONDS + " seconds before results start showing above.";
+            + MEDIA_RUNTIME_SECONDS + " seconds before results are added below.";
     } else {
         message += "...";
     }
