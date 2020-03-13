@@ -9,17 +9,35 @@
     <style>
       td { text-align: center; }
     </style>
+
     <table border="1" align="center">
       <tr>
-        <th>Credits (if you run to next test)</th>
-        <th>Served Others</th>
-        <td rowspan="2">Download <a href="https://hifi-telemetric.herokuapp.com/getdata">CSV of all results so far</a></td>
+        <th rowspan="2" id="enableTestingLabel">Enable Testing</th>
+        <th rowspan="2">Next Scheduled Test</th>
+        <th colspan="2">Credits</th>
+        <th rowspan="2">Served Others</th>
+        <!-- <td rowspan="3">Download <a href="https://hifi-telemetric.herokuapp.com/getdata">CSV of all results so far</a></td> -->
       </tr>
-      <tr><td id="credits">0</td><td id="served">0</td></tr>
+      <tr>
+        <th>recorded so far</th>
+        <th>upon next test completion</th>
+      </tr>
+      <tr>
+        <td><button id="start" type="button" onclick="doAllTests()">Start</button></td>
+        <td id="nextScheduled">not enabled</td>
+        <td id="creditsRecorded">0</td>
+        <td id="creditsEstimated">press Start button</td>
+        <td id="served">0</td>
+      </tr>
     </table>
+    <p><span id="userMessages"></span></p>
 
-    <p>The following information will be recorded.</p>
-    <p>Required capabilities:
+    <hr></hr>
+    <p>The following information will be recorded when you test.</p>
+    <p>
+      <b>your id</b>: <span id="ourId"></span><br>
+      <b>browser</b>: <span id="agent"></span><br>
+      <b>features</b>:
       <input type="checkbox" id="promises" disabled>promises</input>
       <input type="checkbox" id="storage" disabled>local storage</input>
       <input type="checkbox" id="s2t" disabled>speech to text</input>
@@ -28,15 +46,11 @@
       <input type="checkbox" id="sse" disabled>server-side events (SSE)</input>
       <input type="checkbox" id="rtc" disabled>realtime communications (RTC)</input>
       <input type="checkbox" id="dchan" disabled>rtc data</input>
-      <input type="checkbox" id="av" disabled>rtc audio/video</input>
+      <input type="checkbox" id="av" disabled>rtc mdedia</input>
       <input type="checkbox" id="audioNode" disabled>audio context</input>
       <input type="checkbox" id="capture" disabled>capture stream</input>
-      <input type="checkbox" id="webgl" disabled>Web GL 1 </input>
-      <input type="checkbox" id="webgl2" disabled>Web GL 2</input>
-    </p>
-    <p>
-      id: <span id="ourId"></span><br>
-      agent: <span id="agent"></span><br>
+      <input type="checkbox" id="webgl" disabled>WebGL </input>
+      <input type="checkbox" id="webgl2" disabled>WebGL 2</input>
     </p>
     <table id="table" border="1" align="center">
       <tr>
@@ -103,8 +117,6 @@
         <th>roundTripTime</th>
       </tr>
     </table>
-    <p><span id="userMessages"></span></p>
-    <button id="retest" type="button" onclick="doAllTests()" disabled>Retest without reloading</button>
 
     <script src="basic-report.js"></script>
     <script src="rtc-signaling-peer.js"></script>

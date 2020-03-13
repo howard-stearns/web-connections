@@ -49,6 +49,7 @@ function initEventSource() {
     if (homeLine) return sendSseMessage(undefined, 'listing').then(_ => [homeLine, true]);
     window.addEventListener('beforeunload', closeEventSource);
     homeLine = new EventSourceDispatch(guid, {ping, listing, lockRequest}, ['ping', 'listing', 'lockRequest']);
+    startCredits();
     return [homeLine, false];
 }
 
@@ -120,14 +121,15 @@ function testSetupPingBandwidth(label, getChannel, send, collector, skipSetup = 
     const pingKey = label + 'Ping';
     const bandwidthKey = label + 'Kbs';
     return new Promise(async (resolve, reject) => {
+        var channel;
         const reGet = _ => channel;
         var start = startSubtest(5000, collector, setupKey, reject, reGet);
-        const channel = await getChannel();
+        channel = await getChannel();
         channel.onopen = _ => {
             // We're now setup.
             collector[setupKey] = skipSetup ? -1 : (Date.now() - start);
             console.log(setupKey, collector[setupKey]);
-            start = startSubtest(5000, collector, pingKey, reject, channel);
+            start = startSubtest(5000, collector, pingKey, reject, reGet);
             channel.onmessage = event => {
                 // We got the ping.
                 collector[pingKey] = Date.now() - start;
@@ -135,7 +137,7 @@ function testSetupPingBandwidth(label, getChannel, send, collector, skipSetup = 
                 if (label === 'data') { // hack special case
                     collector.peerIp = event.data;
                 }
-                start = startSubtest(5000, collector, bandwidthKey, reject, channel);
+                start = startSubtest(5000, collector, bandwidthKey, reject, reGet);
                 channel.onmessage = messageEvent => {
                     // We got the data block.
                     const elapsed = Date.now() - start;
@@ -154,7 +156,7 @@ function testSetupPingBandwidth(label, getChannel, send, collector, skipSetup = 
             // Send ping and expect a message back.
             send('ping');
         }
-        if (skipSetup || skipSetupWait) channel.onopen(); // FIXME: we need to set onopen before creating channel
+        if (skipSetup || skipSetupWait) channel.onopen();
     }).catch(notarizeFailure(collector, setupKey));
 }
 
@@ -337,9 +339,9 @@ class TestingRTC extends CommonRTC {
 const RETEST_INTERVAL_MS = 30 * 60 * 1000; // Every half hour
 var retestTimer;
 function doAllTests() {
-    retest.disabled = true;
+    start.disabled = true;
+    nextScheduled.innerHTML = "in progress";
     clearTimeout(retestTimer);
-    if (FAILED) return console.error("Missing required functionality.");
     setTimestamp();
     obtainMediaStream(browserData.av, browserData, 'mediaSetup') // Just once...
         .then(media => stream = media) // ... and shared among each RTCPeerConnection
@@ -367,13 +369,11 @@ function doAllTests() {
             console.info(`Completed ${results.length} peer tests.`);
             retestTimer = setTimeout(doAllTests, RETEST_INTERVAL_MS);
             if (!results.length) report(browserData);
+            nextScheduled.innerHTML = new Date(Date.now() + RETEST_INTERVAL_MS).toLocaleTimeString();
             userMessages.innerHTML = "Testing is complete. If you can,"
                 + " <b>please leave this page up</b> so that we can automaticall retest periodically,"
-                + " and so other people can test with you at higher concurrency."
-                + " Next test scheduled for " + new Date(Date.now() + RETEST_INTERVAL_MS);
-            retest.disabled = false;
+                + " and so other people can test with you at higher concurrency.";
+            enableTestingLabel.innerHTML = "Test Now"
+            start.disabled = false;
         })
-
 }
-window.onload = doAllTests;
-

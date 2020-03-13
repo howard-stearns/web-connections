@@ -25,12 +25,23 @@ var browserData = {
 }
 dummy = null;
 
-var loadStart, rate, creditsTimer;
+var loadStart, rate, currentCredits, creditsTimer;
+function showCredits(number, element) {
+    element.innerHTML = Math.floor(number).toLocaleString(undefined, {minimumIntegerDigits: 9});
+}
 function updateCredits() {
     if (!loadStart || !rate) return;
     const sinceStart = Date.now() - loadStart;
     const accrued = sinceStart * rate;
-    credits.innerHTML = Math.floor(accrued).toLocaleString(undefined, {minimumIntegerDigits: 9});
+    showCredits(accrued, creditsEstimated);
+}
+function startCredits() {
+    const now = Date.now();
+    loadStart = now - Math.round(currentCredits / rate);
+    creditsTimer = setInterval(updateCredits, 100);
+}
+function stopCredits() {
+    clearInterval(creditsTimer);
 }
 function setCredits() {
     var xmlhttp = new XMLHttpRequest();
@@ -39,8 +50,8 @@ function setCredits() {
     xmlhttp.onload = function () {
         const data = JSON.parse(xmlhttp.response);
         rate = data.rate;
-        loadStart = Date.now() - Math.round(data.credits / rate);
-        creditsTimer = setInterval(updateCredits, 100);
+        currentCredits = data.credits;
+        showCredits(currentCredits, creditsRecorded);
     };
     xmlhttp.send();
 }
@@ -112,7 +123,7 @@ function report(data) {
     table.appendChild(row);
     const stringified = JSON.stringify(data);
     console.log('uploading', stringified);
-    /* This is what we would want, but we still want to gather failure results from MSIE...
+    /* This is what we would want, but we still want to gather failure results from MSIE, which doesn't have fetch...
     fetch("/upload", {
         method: 'post',
         headers: {'Content-Type': 'application/json'},
@@ -123,6 +134,7 @@ function report(data) {
     var xmlhttp = new XMLHttpRequest();
     xmlhttp.open("POST", "/upload");
     xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    xmlhttp.onload = setCredits;
     xmlhttp.send(stringified);
 }
 
@@ -145,7 +157,8 @@ function setTimestamp() {
 setTimestamp();
 
 if (FAILED) {
-    clearInterval(creditsTimer);
     report(browserData);
+    start.disabled = true;
+    creditsEstimated.innerHTML = "This browser is not modern enough to be used."
 }
 localStorage.setItem(ID_KEY, guid);

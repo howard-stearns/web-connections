@@ -87,7 +87,7 @@ Subclasses **EventSourceRTC**, and **WebSocketRTC**.
 
 RTCSignalingPeer#**createDataChannel**(labelString, channelOptionsDictionary, arcaneOptions) => a promise that resolves to a ready to use (open) RTCDataChannel. Can be used multiple times, with other calls to createDataChannel or addStream overlaping before resolution.
 
-RTCSignalingPeer#**addStream**(mediaStream) => a promise that resolve to a ready to use media stream (the same as was given). Can be used multiple times, with other calls to createDataChannel or addStream overlaping before resolution.
+RTCSignalingPeer#**addStream**(mediaStream, arcaneOptions) => a promise that resolve to a ready to use media stream (the same as was given). Can be used multiple times, with other calls to createDataChannel or addStream overlaping before resolution.
 
 RTCSignalingPeer#**close**() => Should be explicitly called by the application to close the connection and free resources.
 

@@ -29,6 +29,8 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 const CREDITS_PER_MS = 1.667;
 app.post('/upload', function (req, res) {
+    //if ("FIXME skip") return res.end("{}");
+
     const forward = https.request({
         hostname: "hifi-telemetric.herokuapp.com",
         path: "/gimmedata",
@@ -54,7 +56,7 @@ app.post('/upload', function (req, res) {
                 } else {
                     const sinceStart = Date.now() - equivalentStartTimeMs;
                     const accrued = sinceStart * CREDITS_PER_MS;
-                    redis.hset(id, 'credits', Math.round(accrued), error => error && console.error(error));
+                    redis.hset(id, 'credits', Math.round(accrued), (error) => error && console.error(error));
                 }
             }
             const data = d.toString();
@@ -176,7 +178,8 @@ app.get('/messages/:id', function (req, res) {
                 console.error(error);
             } else {
                 const credits = parseInt(data || "0", 10);
-                res.startTime = Date.now() - Math.round(credits / CREDITS_PER_MS);
+                const now = Date.now();
+                res.startTime = now - Math.round(credits / CREDITS_PER_MS);
             }
         });
     }
