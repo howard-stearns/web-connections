@@ -371,7 +371,7 @@ function doAllTests() {
             if (!results.length) report(browserData);
             nextScheduled.innerHTML = new Date(Date.now() + RETEST_INTERVAL_MS).toLocaleTimeString();
             userMessages.innerHTML = "Testing is complete. If you can,"
-                + " <b>please leave this page up</b> so that we can automaticall retest periodically,"
+                + " <b>please leave this page up</b> so that we can automatically retest periodically,"
                 + " and so other people can test with you at higher concurrency.";
             enableTestingLabel.innerHTML = "Test Now"
             start.disabled = false;
