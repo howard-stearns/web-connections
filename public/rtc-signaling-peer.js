@@ -86,7 +86,7 @@ class LoopbackDispatch extends P2pDispatch {
         super(id, receiver);
         this.addToDispatchers();
         this.connection = this;
-        return Promise.resolve(this); // Following the rule that the constructor must return a promise that resolves to instance.
+        this.openPromise = Promise.resolve(this);
     }
     sendObject(messageObject) {
         if (!this.connection) return Promise.resolve();
@@ -116,27 +116,27 @@ RandomDelayLoopbackDispatch.MaxDelayMS = 100; // See DONE_TO_CLOSE_INTERVAL_MS i
 
 // Dispatchers that use a connection to a server, such as a WebSocket or EventSource.
 class ConnectionDispatch extends P2pDispatch {
-    constructor(id, receiver, events, waitForOpen = true) {
+    constructor(id, receiver, events) {
         super(id, receiver);
-        return this.constructor
-            .getConnection(this, waitForOpen)
-            .then(connection => this.initConnection(connection, events));
+        this.openPromise = new Promise(resolve => this._openResolver = resolve);
+        this.initConnection(this.getConnection(), events);
+    }
+    getConnection() {
+        const dispatchers = this.addToDispatchers();
+        if (dispatchers.length > 1) {
+            this._openResolver(this);
+            return dispatchers[0].connection;
+        }
+        const connection = this.constructor.createInitialConnection(this.id);
+        connection.onopen = _ => { connection.onopen = null; this._openResolver(this) };
+        return connection;
     }
     // Regardless of whethere there is one (WebSocket or EventSource) connection per browser (e.g., regardless of
     // how many ids are presented in that browser), the server dispatches by message.to string (not message.to
     // + message.from), so the server must not be asked for more than one connection per message.to id.
     // Therefore, we must multiplex multiple receiver objects on the same id over a single WebSocket.
     // We could do this with a single handler that dispatches to the receiver that matches mssage.from,
-    // but currently, we do that by multiple onmessage, 
-    static getConnection1(instance, waitForOpen = true) {
-        const dispatchers = instance.addToDispatchers();
-        if (dispatchers.length > 1) return Promise.resolve(dispatchers[0].connection);
-        return new Promise(resolve => {
-            const connection = this.createInitialConnection(instance.id);
-            if (!waitForOpen) return resolve(connection);
-            connection.onopen = _ => { connection.onopen = null; resolve(connection); };
-        });
-    }
+    // but currently, we do that by multiple onmessage, and a test/early-exit in p2pReceive().
     initConnection(connection) {
         this.connection = connection;
         this.onmessage = event => this.p2pReceive(JSON.parse(event.data));
@@ -193,7 +193,6 @@ class WebSocketDispatch extends ConnectionDispatch {
     }
 }
 WebSocketDispatch.site = ((location.protocol === 'https:') ? 'wss:' : 'ws:') + "//" + location.host;
-WebSocketDispatch.getConnection = serializePromises(WebSocketDispatch.getConnection1.bind(WebSocketDispatch));
 WebSocketDispatch.peers = {};
 
 // Dispatches by POSTing to /message, with {from, to, type, data} as the JSON body.
@@ -242,7 +241,6 @@ class EventSourceDispatch extends ConnectionDispatch {
         super.doClose();
     }
 }
-EventSourceDispatch.getConnection = serializePromises(EventSourceDispatch.getConnection1.bind(EventSourceDispatch));
 EventSourceDispatch.peers = {};
 
 
@@ -276,10 +274,9 @@ class RTCSignalingPeer {
         
         this.queue = Promise.resolve(); // See acquireLock
 
-        return new this.constructor.dispatchClass(ourId, this, this.constructor.events).then(dispatch => {
-            this.p2pDispatcher = dispatch;
-            return this;
-        });
+        return (new this.constructor.dispatchClass(ourId, this, this.constructor.events)).openPromise
+            .then(dispatch => this.p2pDispatcher = dispatch)
+            .then(_ => this)
     }
     logError(label, eventOrException) {
         const data = this.constructor.gatherErrorData(label, eventOrException);
@@ -384,7 +381,7 @@ class RTCSignalingPeer {
     // Applications should not create data channel or add tracks directly to this.peer. Use these two instead.
     // They both answer a promise that does not resolve until channel or stream is "ready" for use.
 
-    createDataChannel(label = "data", channelOptions = {}, {waitForOpen = true, timeout, delay = 1000} = {}) { // Promise resolves when the channel is open (implying negotiation has happened).
+    createDataChannel(label = "data", channelOptions = {}, {timeout, delay = 1000} = {}) { // Promise resolves when the channel is open (implying negotiation has happened).
         // One should not write on an RTCDataChannel until it gets 'open'. So that's when we primarily resolve.
         // However, some browsers have bugs (cough, Edge), in which they sometimes fail to signal 'open', particularly if signaling takes too long.
         // So... acquireLock is watching for peer.signalingState returning to stable anyway (for negotiationneeded and addStream), so if we detect that
@@ -393,11 +390,7 @@ class RTCSignalingPeer {
         fixme('createDataChannel', this.id);
         return this.acquireLock(resolve => {
             const channel = this.peer.createDataChannel(label, channelOptions);
-            if (waitForOpen) {
-                channel.onopen = _ => resolve(channel);
-            } else{
-                resolve(channel);
-            }
+            channel.onopen = _ => resolve(channel);
             return channel;
         }, timeout, delay);
     }

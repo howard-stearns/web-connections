@@ -81,8 +81,8 @@ describe('Browser', function () {
                     receiverA = {peerId: idB};
                     receiverB = {peerId: idA};
                     Promise.all([
-                        (new dispatcherClass(idA, receiverA, events)).then(a => dispatcherA = a),
-                        (new dispatcherClass(idB, receiverB, events)).then(b => dispatcherB = b)
+                        (new dispatcherClass(idA, receiverA, events)).openPromise.then(a => dispatcherA = a),
+                        (new dispatcherClass(idB, receiverB, events)).openPromise.then(b => dispatcherB = b)
                     ]).then(done);
                 });
                 afterEach(function () {
@@ -146,8 +146,8 @@ describe('Browser', function () {
                     var payloadFromX = 'payload 1', payloadFromB = 'payload 2', type = events[0];
                     var idX = uuidv4('X'), receiverAX = {peerId: idX};
                     Promise.all([
-                        new dispatcherClass(idA, receiverAX, events),
-                        new dispatcherClass(idX, {peerId: idA}, events)
+                        (new dispatcherClass(idA, receiverAX, events)).openPromise,
+                        (new dispatcherClass(idX, {peerId: idA}, events)).openPromise
                     ]).then(([dispatcherAX, dispatcherXA]) => {
                         Promise.all([
                             new Promise(resolve => { receiverA[type] = resolve; }),

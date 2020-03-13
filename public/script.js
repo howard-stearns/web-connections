@@ -48,8 +48,8 @@ function initEventSource() {
     }
     if (homeLine) return sendSseMessage(undefined, 'listing').then(_ => [homeLine, true]);
     window.addEventListener('beforeunload', closeEventSource);
-    return new EventSourceDispatch(guid, {ping, listing, lockRequest}, ['ping', 'listing', 'lockRequest'], false)
-        .then(d => [homeLine = d, false]);
+    homeLine = new EventSourceDispatch(guid, {ping, listing, lockRequest}, ['ping', 'listing', 'lockRequest']);
+    return [homeLine, false];
 }
 
 
@@ -90,12 +90,13 @@ function updateTestingMessage() {
 
 // Answer Date.now(), but also start a timer that will reject the test if
 // the specified collector[key] has not been set before the timer goes off.
-function startSubtest(milliseconds, collector, key, reject, channel = {}) {
+function startSubtest(milliseconds, collector, key, reject, getChannel) {
     setTimeout(_ => {
         if (collector[key] === undefined) {
+            const channel = getChannel ? getChannel() : {};
             const failReason = channel.failReason || FAIL_VALUE;
             var label = channel.failReason || "timeout";
-            if (channel && (channel.readyState !== undefined)) {
+            if (channel.readyState !== undefined) {
                 label += ' ' + channel.readyState;
             }
             reject(label);
@@ -114,15 +115,19 @@ function notarizeFailure(collector, key) {
 
 // Returns a promise resolving to collector with results of setup, ping and bandwidth noted.
 // We're relying on each kind of "channel" having and onopen and onmessage.
-function testSetupPingBandwidth(label, channel, send, collector, skipSetup = false) {
+function testSetupPingBandwidth(label, getChannel, send, collector, skipSetup = false, skipSetupWait = false) {
     const setupKey = label + 'Setup';
     const pingKey = label + 'Ping';
     const bandwidthKey = label + 'Kbs';
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
+        const reGet = _ => channel;
+        var start = startSubtest(5000, collector, setupKey, reject, reGet);
+        const channel = await getChannel();
         channel.onopen = _ => {
             // We're now setup.
             collector[setupKey] = skipSetup ? -1 : (Date.now() - start);
             console.log(setupKey, collector[setupKey]);
+            start = startSubtest(5000, collector, pingKey, reject, channel);
             channel.onmessage = event => {
                 // We got the ping.
                 collector[pingKey] = Date.now() - start;
@@ -130,6 +135,7 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
                 if (label === 'data') { // hack special case
                     collector.peerIp = event.data;
                 }
+                start = startSubtest(5000, collector, bandwidthKey, reject, channel);
                 channel.onmessage = messageEvent => {
                     // We got the data block.
                     const elapsed = Date.now() - start;
@@ -143,15 +149,12 @@ function testSetupPingBandwidth(label, channel, send, collector, skipSetup = fal
                     resolve(collector);
                 };
                 // Send a data block and expect a message back.
-                start = startSubtest(5000, collector, bandwidthKey, reject, channel);
                 send('data' + block);
             };
             // Send ping and expect a message back.
-            start = startSubtest(5000, collector, pingKey, reject, channel);
             send('ping');
         }
-        var start = startSubtest(5000, collector, setupKey, reject, channel);
-        if (skipSetup) channel.onopen(); // FIXME: we need to set onopen before creating channel
+        if (skipSetup || skipSetupWait) channel.onopen(); // FIXME: we need to set onopen before creating channel
     }).catch(notarizeFailure(collector, setupKey));
 }
 
@@ -184,6 +187,7 @@ class CommonRTC extends EventSourceRTC { // RTC peer to whatever we are testing 
     initDataChannel(channel) {
         this.channel = channel;
         channel.onerror = e => console.error(e); // Alas, not widely supported.
+        return channel;
     }
 }
 
@@ -242,11 +246,10 @@ class TestingRTC extends CommonRTC {
         return new TestingRTC(peerId, testGUID).then(rtc => {
             var mediaStartTime;
             rtc.results = Object.assign({peer: peerId}, browserData);
-            return rtc.createDataChannel(`${rtc.id} => ${rtc.peerId}`, {}, {waitForOpen: false})
-                .then(c => rtc.initDataChannel(c))
-                .then(_ => testSetupPingBandwidth('data', rtc.channel,
-                                                  data => rtc.channel.send(data),
-                                                  rtc.results))
+            return testSetupPingBandwidth('data',
+                                          _ => rtc.createAndInitDataChannel(`${rtc.id} => ${rtc.peerId}`),
+                                          data => rtc.channel.send(data),
+                                          rtc.results, false, true)
                 .then(_ => rtc.testMedia())
                 .then(_ => rtc.peer.getStats())
                 .then(stats => rtc.reportMedia(stats))
@@ -256,6 +259,10 @@ class TestingRTC extends CommonRTC {
                 .then(_ => rtc.close())
                 .then(_ => report(rtc.results));
         });
+    }
+    createAndInitDataChannel(label) {
+        return this.createDataChannel(label)
+            .then(c => this.initDataChannel(c));
     }
     logError(shortLabel, error) {
         const [label, code, name, message] = super.logError(shortLabel, error);
@@ -340,14 +347,16 @@ function doAllTests() {
     
         .then(_ => new WebSocketDispatch(guid, {}, [], false))
         .then(wsDispatcher => 
-            testSetupPingBandwidth('ws', wsDispatcher.connection,
-                                   data => wsDispatcher.p2pSend(guid, undefined, data),
-                                   browserData)
+              testSetupPingBandwidth('ws',
+                                     _ => Promise.resolve(wsDispatcher.connection),
+                                     data => wsDispatcher.p2pSend(guid, undefined, data),
+                                     browserData)
               .then(_ => wsDispatcher))
         .then(wsDispatcher => wsDispatcher.close())
     
         .then(initEventSource)
-        .then(([dispatcher, reinited]) => testSetupPingBandwidth('sse', dispatcher.connection,
+        .then(([dispatcher, reinited]) => testSetupPingBandwidth('sse',
+                                                                 _ => Promise.resolve(dispatcher.connection),
                                                                  sendSseMessage, browserData,
                                                                  !!reinited))
     
