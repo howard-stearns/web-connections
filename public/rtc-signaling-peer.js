@@ -444,7 +444,6 @@ class RTCSignalingPeer {
                 };
                 this.p2pSend('lockRequest');
             }))
-            .catch(_ => null)
             .then(result => {
                 clearTimeout(timeout);
                 clearTimeout(delay);

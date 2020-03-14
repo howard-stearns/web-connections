@@ -244,13 +244,13 @@ describe('Browser', function () {
                             });
                         });
                         it('with rejection', function (done) {
-                            rtcA.acquireLock(rejects).then(x => {
-                                expect(x).toBeFalsy();
+                            rtcA.acquireLock(rejects).catch(e => e).then(x => {
+                                expect(x).toBe(99);
                                 done();
                             });
                         });
                         it('times out', function (done) {
-                            rtcA.acquireLock(resolves, 500).then(x => {
+                            rtcA.acquireLock(resolves, 500).catch(e => e).then(x => {
                                 expect(x).toBeFalsy();
                                 done();
                             });

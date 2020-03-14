@@ -74,8 +74,8 @@ const RTC_CONFIGURATION = {
             //"stun:stun.ekiga.net",
             //"stun:stun.xten.com"
         ]},
-        //{urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'},
-        {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
+        {urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'}
+        //{urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
     ]
     //, iceTransportPolicy: 'relay'
 };
@@ -98,8 +98,8 @@ function startSubtest(milliseconds, collector, key, reject, getChannel) {
     setTimeout(_ => {
         if (collector[key] === undefined) {
             const channel = (getChannel && getChannel()) || {};
-            const failReason = channel.failReason || FAIL_VALUE;
-            var label = channel.failReason || "timeout";
+            const failReason = collector.failReason || FAIL_VALUE;
+            var label = collector.failReason || "timeout";
             if (channel.readyState !== undefined) {
                 label += ' ' + channel.readyState;
             }
@@ -132,7 +132,7 @@ function testSetupPingBandwidth(label, getChannel, send, collector, skipSetup = 
             // We're now setup.
             collector[setupKey] = skipSetup ? -1 : (Date.now() - start);
             console.log(setupKey, collector[setupKey]);
-            start = startSubtest(5000, collector, pingKey, reject, reGet);
+            start = startSubtest(6000, collector, pingKey, reject, reGet);
             channel.onmessage = event => {
                 // We got the ping.
                 collector[pingKey] = Date.now() - start;
@@ -258,7 +258,7 @@ class TestingRTC extends CommonRTC {
                 .then(_ => rtc.testMedia())
                 .then(_ => rtc.peer.getStats())
                 .then(stats => rtc.reportMedia(stats))
-                .then(_ => rtc.channel.onmessage = null)
+                .then(_ => rtc.channel && (rtc.channel.onmessage = null))
                 .catch(e => console.log('caught', e))
                 .then(_ => rtc.p2pSend('close')) // Explicitly tell the RespondingRTC to go away
                 .then(_ => rtc.close())
@@ -271,7 +271,7 @@ class TestingRTC extends CommonRTC {
     }
     logError(shortLabel, error) {
         const [label, code, name, message] = super.logError(shortLabel, error);
-        this.channel.failReason = (code == 404) ? "peer offline" : [label, name, message].join(' ');
+        if (this.results) this.results.failReason = (code == 404) ? "peer offline" : [label, name, message].join(' ');
     }
     testMedia() {
         const nTracksKey = 'nTracks';
@@ -280,7 +280,7 @@ class TestingRTC extends CommonRTC {
         var mediaStartTime
         return new Promise((resolve, reject) => {
             var tracksReceived = 0;
-            if (!stream) return resolve(); // obtainMediaStream already recorded whatever needs recording
+            if (!stream || !this.channel) return resolve(); // obtainMediaStream already recorded whatever needs recording
             this.channel.onmessage = event => {
                 if (!['audio', 'video'].includes(event.data)) {
                     return console.error("Unexpected video message %s from %s", event.data, this.peerId);
