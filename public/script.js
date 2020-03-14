@@ -74,8 +74,8 @@ const RTC_CONFIGURATION = {
             //"stun:stun.ekiga.net",
             //"stun:stun.xten.com"
         ]},
-        //{urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
-        {urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'}
+        //{urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'},
+        {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
     ]
     //, iceTransportPolicy: 'relay'
 };
@@ -97,7 +97,7 @@ function updateTestingMessage() {
 function startSubtest(milliseconds, collector, key, reject, getChannel) {
     setTimeout(_ => {
         if (collector[key] === undefined) {
-            const channel = getChannel ? getChannel() : {};
+            const channel = (getChannel && getChannel()) || {};
             const failReason = channel.failReason || FAIL_VALUE;
             var label = channel.failReason || "timeout";
             if (channel.readyState !== undefined) {
@@ -191,7 +191,7 @@ class CommonRTC extends EventSourceRTC { // RTC peer to whatever we are testing 
     }
     initDataChannel(channel) {
         this.channel = channel;
-        channel.onerror = e => console.error(e); // Alas, not widely supported.
+        if (channel) channel.onerror = e => console.error(e); // Alas, not widely supported, and createDataChannel may have failed.
         return channel;
     }
 }
