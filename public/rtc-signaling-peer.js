@@ -312,6 +312,7 @@ class RTCSignalingPeer {
     close() { // So applications should explicitly call this to allow cleanup.
         const peer = this.peer;
         fixme('close', this.id);
+        if (this.peer.signalingState !== 'stable') console.info("Closing in unstable state", this.id, this.peer.signalingState);
         peer.removeEventListener('negotiationneeded', this.onnegotiationneeded);
         peer.removeEventListener('icecandidate', this.onicecandidate);
         peer.removeEventListener('icecandidateerror', this.onicecandidateerror);
