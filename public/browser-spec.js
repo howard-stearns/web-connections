@@ -198,22 +198,9 @@ describe('Browser', function () {
                         (new peerClass(idB, idA, CONFIGURATION, {onerror: showError})).then(b => rtcB = b)
                     ]).then(done);
                 });
-                afterEach(function (done) {
-                    // Kludge alert! Supicious choices!
-                    // The delay here is because messages "in flight" at the time of closing - particularly a flood of icecandidates -
-                    // will cause a bunch of harmless logspam when we attempt to delive them at the other end if it's already closed.
-                    // It won't fail the tests, but I'd like to be able to say that any logspam at all in these tests should be
-                    // investigated. Alas, I don't know that there's any single correct minimal time to wait on all computers, so we don't
-                    // know about problems until such investigation until we dig in. Maybe more worrisome, is that having such a delay
-                    // might mask a real problem. (But maybe we should design a specific test for that with a hard fail?)
-                    // The most challenging case I've found so far was commit 72c31a7774083d276ee548dd780f8720541aee7e
-                    // with seed 23367 in FF and Safari. (E.g., http://localhost:8443/SpecRunner.html?seed=23367)
-                    const DONE_TO_CLOSE_INTERVAL_MS = 175; // Must be >= RandomDelayLoopbackDispatch.MaxDelayMS.
-                    setTimeout(_ => {
-                        rtcA.close();
-                        rtcB.close();
-                        done();
-                    }, DONE_TO_CLOSE_INTERVAL_MS);
+                afterEach(function () {
+                    rtcA.close();
+                    rtcB.close();
                 });
                 var label = "foo", payload = "ping";
                 describe('lock', function () {

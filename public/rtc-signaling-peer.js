@@ -35,6 +35,7 @@ class P2pDispatch {
         // send over the connection.
         // The data is anything that can be serialized as JSON (i.e., does not have to be pre-serialized).
         // The type argument is a string that names a method on the receiver that has an id specified by to.
+        if (!this.connection) return Promise.resolve();
         return this.sendObject({from: this.id, to, data, type});
     }
     p2pReceive(messageObject) {
@@ -50,6 +51,7 @@ class P2pDispatch {
         // It would not work to have the semantics be that 'from' is really a concatnation of both peer ids, because
         // you could have multiple rtc instances (multiple receivers) between a given pair.
         const peer = this.receiver.peerId;
+        if (!this.connection) return;
         if (peer && (messageObject.from !== peer)) return // normal. Next line would indicate a bug, though.
         if (messageObject.to !== this.id) return console.warn(`${messageObject.type} to ${messageObject.to} received at ${this.id}`);
         // untyped messages must be handled by an application-specific onmessage handler.
@@ -222,7 +224,7 @@ class EventSourceDispatch extends ConnectionDispatch {
             // so that handlers can do what they want with the rejection, such as logging it.
             // Some browsers DO log bad responses in a way that looks like an error but isn't (and
             // annoyingly, you can't turn this off), but it doesn't give you the url nor the body.
-            if (!r.ok) return Promise.reject(r);
+            if (!r.ok && this.connection) return Promise.reject(r);
             return r;
         }));
         // One could imagine the server implementation sending a SSE with the JSON payload as
@@ -313,8 +315,8 @@ class RTCSignalingPeer {
         peer.removeEventListener('negotiationneeded', this.onnegotiationneeded);
         peer.removeEventListener('icecandidate', this.onicecandidate);
         peer.removeEventListener('icecandidateerror', this.onicecandidateerror);
-        peer.close();
         this.p2pDispatcher.close();
+        peer.close();
     }
 
     icecandidate(iceCandidate) { // We have been signalled by the other end about a new candidate.
@@ -409,7 +411,43 @@ class RTCSignalingPeer {
             return stream;
         }, timeout, delay);
     }
-    // Executes body(resolve, reject) with a mutex between the peers.
+    // Executes body(resolve, reject) and returns a promise that will be fullfilled:
+    // - If the body explictly resolves or rejects a value.
+    // - If the peer undergoes a signalingState change into stable, in which case the promise is resolved
+    //   for you after delayMs, with whatever body returned as the resolved value.
+    withCheckForReturnToStable(body, delayMs = 0) {
+        var result, delay, onStateChange;
+        return new Promise((resolve, reject) => {
+            onStateChange = _ => {
+                fixme('signaling state', this.peer.signalingState, this.id);
+                if (this.peer.signalingState === 'stable') {
+                    delay = setTimeout(_ => resolve(result), delayMs);
+                }
+            }
+            this.peer.addEventListener('signalingstatechange', onStateChange);
+            result = body(resolve, reject);
+        }).then(fulfilled => {
+            clearTimeout(delay);
+            this.peer.removeEventListener('signalingstatechange', onStateChange);
+            return fulfilled;
+        });
+    }
+    // Executes body(resolve, reject) and returns a promise that will be fullfilled by the body calling resolve or reject.
+    // Additionally, if not fullfilled by the body, the promise will be rejected (with no value) if timeoutMs expires.
+    withTimeout(body, timeoutMs) {
+        var timeout;
+        return new Promise((resolve, reject) => {
+            timeout = setTimeout(_ => {
+                fixme('lock timeout!', this.id);
+                reject();
+            }, timeoutMs);
+            body(resolve, reject);
+        }).then(result => {
+            clearTimeout(timeout);
+            return result;
+        });
+    }
+    // Executes body(resolve, reject) with a mutex between the peers, and returns a corresponding promise.
     // Requests to acquireLock will be queued up and execute one at a time (on our side of the pair), in serial.
     // When it our turn, we request a lock from our peer and wait for it. This is done as a two phase commit:
     // - If only one side requests, it goes when the other side agrees.
@@ -424,30 +462,18 @@ class RTCSignalingPeer {
     //   When this goes off, the body is rejected.
     // The mutex exists only between the two pairs. It does not effect other RTCSignalingPeers, even in the same browser.
     acquireLock(body, timeoutMs = 5000, stableResolutionDelayMs = 1) {
-        var timeout, onStateChange, result, delay;
         fixme('attempting to acquireLock at', this.id);
         return this.queue = this.queue
-            .then(_ => new Promise((resolve, reject) => {
+            .then(_ => this.withTimeout((resolve, reject) => {
                 fixme('aquireLock processing at', this.id);
-                timeout = setTimeout(_ => {fixme('lock timeout!', this.id); reject()}, timeoutMs);
-                onStateChange = _ => {
-                    fixme('signaling state', this.peer.signalingState, this.id);
-                    if (this.peer.signalingState === 'stable') {
-                        delay = setTimeout(_ => resolve(result), stableResolutionDelayMs);
-                    }
-                };
                 this.lockResponse = _ => {
                     fixme('acquire lock at', this.id);
                     this.acquired = true;
-                    this.peer.addEventListener('signalingstatechange', onStateChange);
-                    result = body(resolve, reject);
+                    this.withCheckForReturnToStable(body, stableResolutionDelayMs).then(resolve, reject);
                 };
                 this.p2pSend('lockRequest');
-            }))
+            }, timeoutMs))
             .then(result => {
-                clearTimeout(timeout);
-                clearTimeout(delay);
-                this.peer.removeEventListener('signalingstatechange', onStateChange);
                 const hasPending = this.peerLockPending;
                 fixme('completed locked work at', this.id, 'hasPending:', !!hasPending);
                 this.lockResponse = this.peerLockPending = this.acquired = null;
