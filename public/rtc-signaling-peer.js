@@ -223,7 +223,8 @@ class EventSourceDispatch extends ConnectionDispatch {
         }).then(r => { // fetch does not give errors on bad responses, so let's reject them here,
             // so that handlers can do what they want with the rejection, such as logging it.
             // Some browsers DO log bad responses in a way that looks like an error but isn't (and
-            // annoyingly, you can't turn this off), but it doesn't give you the url nor the body.
+            // annoyingly, you can't turn this off), so you may see the 404 in console, without it
+            // rejecting here and being collected in RTCSignalingPeer#logError, below.
             if (!r.ok && this.connection) return Promise.reject(r);
             return r;
         }));
@@ -244,7 +245,6 @@ class EventSourceDispatch extends ConnectionDispatch {
     }
 }
 EventSourceDispatch.peers = {};
-
 
 
 // SIGNALING PEERS: Represents half a peer pair, maintaing an RTCPeerConnection between them.
@@ -293,6 +293,10 @@ class RTCSignalingPeer {
         // for a list of codes. TURN adds a few more error codes; see
         // RFC 5766, section 15 for details.
         // Server could not be reached are in the range 700-799.
+        const code = eventOrException.code || eventOrException.errorCode || eventOrException.status;
+        // Chrome gives 701 errors for our turn server that it does not give for other turn servers.
+        // This isn't good, but it's way too noisy to slog through such errors, and I don't know how to fix our turn configuration.
+        if (code === 701) return;
         this.logError('ice', eventOrException);
     }
     negotiationneededError(exception) { // For errors in how this peer handles negotiationneeded.

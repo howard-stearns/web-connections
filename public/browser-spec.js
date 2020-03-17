@@ -19,8 +19,8 @@ const CONFIGURATION = {
             'stun:stun.l.google.com:19302'
             //'stun:ice.highfidelity.com'
         ]},
-        //{urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
-        {urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh'}
+        {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
+        //{urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh'}
     ]
     //, iceTransportPolicy: 'relay'
 };

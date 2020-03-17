@@ -74,8 +74,8 @@ const RTC_CONFIGURATION = {
             //"stun:stun.ekiga.net",
             //"stun:stun.xten.com"
         ]},
-        {urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'}
-        //{urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
+        //{urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com'}
+        {urls: 'turn:turn.highfidelity.com:3478', username: 'clouduser', credential: 'chariot-travesty-hook'}
     ]
     //, iceTransportPolicy: 'relay'
 };
