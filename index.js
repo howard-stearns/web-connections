@@ -17,6 +17,8 @@ app.set('trust proxy', true);
 const logger = morgan('common');
 pseudo.configure(logger);
 
+if (redis) redis.on('error', console.error);
+
 app.use(logger);
 app.use(express.static('public'));
 function rawBodySaver(req, res, buf, encoding) {
