@@ -151,8 +151,8 @@ describe('Browser', function () {
                         (new dispatcherClass(idX, {peerId: idA}, events)).openPromise
                     ]).then(([dispatcherAX, dispatcherXA]) => {
                         Promise.all([
-                            new Promise(resolve => { receiverA[type] = resolve; }),
-                            new Promise(resolve => { receiverAX[type] = resolve; })
+                            new Promise(resolve => receiverA[type] = resolve),
+                            new Promise(resolve => receiverAX[type] = resolve)
                         ]).then(([answerB, answerX]) => {
                             expect(answerB).toBe(payloadFromB);
                             expect(answerX).toBe(payloadFromX);
@@ -167,19 +167,18 @@ describe('Browser', function () {
                 it('leaves nothing behind (and close can be called more than once)', function (done) {
                     const connection = dispatcherA.connection;
                     dispatcherA.close();
-                        expect(dispatcherA.connection).toBeFalsy();
-                        if (connection.readyState) {
-                            expect(connection.onopen).toBe(null);
-                            expect(connection.onclose).toBeFalsy(); // Doesn't ever exist on EventSource.
-                            expect(connection.onerror).toBe(null);
-                            // Alas, no way to confirm that any addEventListener's have been removed.
-                            expect(connection.onmessage).toBe(null);
-                            // If no failures, then there should not be anything holding the connection open.
-                            expect(connection.readyState).toBeGreaterThanOrEqual(2); // WebSocket could be closing or closed
-                        }
-                        expect(Object.keys(receiverA).length).toBe(1); // peerId
-                        done();
-                    //});
+                    expect(dispatcherA.connection).toBeFalsy();
+                    if (connection.readyState) {
+                        expect(connection.onopen).toBe(null);
+                        expect(connection.onclose).toBeFalsy(); // Doesn't ever exist on EventSource.
+                        expect(connection.onerror).toBe(null);
+                        // Alas, no way to confirm that any addEventListener's have been removed.
+                        expect(connection.onmessage).toBe(null);
+                        // If no failures, then there should not be anything holding the connection open.
+                        expect(connection.readyState).toBeGreaterThanOrEqual(2); // WebSocket could be closing or closed
+                    }
+                    expect(Object.keys(receiverA).length).toBe(1); // peerId
+                    done();
                 });
             });
         }
@@ -187,6 +186,7 @@ describe('Browser', function () {
         makeDispatchSuite(RandomDelayLoopbackDispatch);
         makeDispatchSuite(WebSocketDispatch);
         makeDispatchSuite(EventSourceDispatch);
+        makeDispatchSuite(CroquetDispatch);
     });
     describe('signaling', function () {
         function makeSignalingSuite(peerClass) {
@@ -484,5 +484,6 @@ describe('Browser', function () {
         makeSignalingSuite(RandomDelayLoopbackRTC);        
         makeSignalingSuite(WebSocketRTC);
         makeSignalingSuite(EventSourceRTC);
+        makeSignalingSuite(CroquetRTC);
     });
 });
