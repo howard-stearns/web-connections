@@ -72,7 +72,7 @@ class P2pDispatch {
     }
     doClose() {
         const dispatchers = this.constructor.peers[this.id];
-        dispatchers.splice(dispatchers.indexOf(this.connection), 1);
+        dispatchers.splice(dispatchers.indexOf(this), 1);
         if (!dispatchers.length) {
             delete this.constructor.peers[this.id];
             this.closeSharedConnection();
@@ -439,12 +439,12 @@ class RTCSignalingPeer {
     }
     // Executes body(resolve, reject) and returns a promise that will be fullfilled by the body calling resolve or reject.
     // Additionally, if not fullfilled by the body, the promise will be rejected (with no value) if timeoutMs expires.
-    withTimeout(body, timeoutMs) {
+    withTimeout(body, timeoutMs, label) {
         var timeout;
         return new Promise((resolve, reject) => {
             timeout = setTimeout(_ => {
                 fixme('lock timeout!', this.id);
-                reject();
+                reject(label);
             }, timeoutMs);
             body(resolve, reject);
         }).then(result => {

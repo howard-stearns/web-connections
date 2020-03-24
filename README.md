@@ -46,21 +46,38 @@ However, as people come to face various design choices, it might pay to make tho
 
 ## Data
 
-**What's Missing:** (in modern browsers, including mobile but not Internet Explorer):
+Each of these will be backed by histograms:
 
-| what                        | where                            | % users | notes |
-|----------------------------:|:---------------------------------|:-------:|-------|
-| **data channels**           | Edge (intermittent)              | TBD!    |       |
-| **TURN required**           | cellular? TBD!                   | TBD!    |       |
-| **_any_ other RTC failure** | TBD!                             | TBD!    |       |
-| **Speech-to-Text**          | missing everywhere except Chrome | TBD!    | Android chrome beeps annoyingly at start of capture|
-| **captureStream**           | Safari                           | TBD!    |       |
+1. Participation
+2. Problems
+3. Performance
+
+**Participation:**
+
+By browser instance. (A single person might have multiple devices, or multiple different browsers.)
+
+| mobile/desktop | duration  | how many | % of instances |
+|---------------:|:---------:|:--------:|:--------------:|
+| mobile         | any       |  TBD     | 100%           |
+| mobile         | < 30 min  |  TBD     | TBD            |
+| mobile         | 30min-2hr |  TBD     | TBD            |
+| mobile         | 2-6 hrs   |  TBD     | TBD            |
+| desktop        | any       |  TBD     | 100%           |
+| desktop        | < 30 min  |  TBD     | TBD            |
+| desktop        | 30min-2hr |  TBD     | TBD            |
+| desktop        | 2-6 hrs   |  TBD     | TBD            |
 
 
-_**I need to get lists from Sam and Chris for feature detection reporting.**_
+**Problems:**
 
-_**TBD: What data is meaningful as to how many people contribute how much computing time?**_
-
+| what                           | where                            | % users | notes |
+|-------------------------------:|:---------------------------------|:-------:|-------|
+| **cannot run (e.g., too old)** | e.g., Internet Explorer          | TBD     |       |
+| **data channels**              | Edge (intermittent)              | TBD     |       |
+| **TURN required**              | cellular? TBD!                   | TBD     |       |
+| **_any_ other RTC failure**    | TBD!                             | TBD     |       |
+| **captureStream**              | Safari                           | TBD     |       |
+| **Speech-to-Text**             | missing everywhere except Chrome | TBD     | Android chrome beeps annoyingly at start of capture|
 
 **Performance:** Very rough typical figures (averaged by eye over a small sample):
 
@@ -68,14 +85,13 @@ _**TBD: What data is meaningful as to how many people contribute how much comput
 |-------------------:|:----------:|:---------:|:---------------------------:|
 | web sockets        | 200-700    | 75-100    | 750-1,100                   |
 | server-side events | 80-400     | 85-400    | 750-1,600                   |
-| rtc data channel   | 1,000-3,000*| 30-300    | 500-2,000                   |
-| rtc media          | 250-1,300*  | 30-150    | 35 audio, 1,200 video       |
+| rtc data channel   | 1,000-3,000| 30-300    | 500-2,000                   |
+| rtc media          | 250-1,300  | 30-150    | 35 audio, 1,200 video       |
 
 - Ping time is round trip to _server_ and back for ws and sse, and to peer and back for data channel. For media, it is "round trip time" from the rtc stats (ignoring peers that are on the same local network).
 - Bandwidth for ws, sse, and data channel is crudely computed from time to send a bit more than 30kB (and therefore requires several packets). The data channel is configured as reliable and ordered (defaults), and I ignored peers on the same local network.
 - Bandwidth for media is from the stats bytesSent and the test runtime.
 
-(_**I'm thinking we should probably get a true average and one-std-deviation below. I expect we would find that it is bimodal for wifi separate from cellular, but we don't have a way to check whether someone is on cellular.**_)
 
 ## Primary API
 
