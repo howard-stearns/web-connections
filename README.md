@@ -58,11 +58,11 @@ By browser instance. (A single person might have multiple devices, or multiple d
 
 | mobile/desktop | duration  | how many | % of instances |
 |---------------:|:---------:|:--------:|:--------------:|
-| mobile         | any       |  TBD     | 100%           |
+| mobile         | any       |  TBD     | TBD            |
 | mobile         | < 30 min  |  TBD     | TBD            |
 | mobile         | 30min-2hr |  TBD     | TBD            |
 | mobile         | 2-6 hrs   |  TBD     | TBD            |
-| desktop        | any       |  TBD     | 100%           |
+| desktop        | any       |  TBD     | TBD            |
 | desktop        | < 30 min  |  TBD     | TBD            |
 | desktop        | 30min-2hr |  TBD     | TBD            |
 | desktop        | 2-6 hrs   |  TBD     | TBD            |
