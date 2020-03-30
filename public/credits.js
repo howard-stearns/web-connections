@@ -111,6 +111,7 @@ function runSomething(runtimeMs, circle, onEnd) {
 function runTest() {
     if (!loadStart) startCredits();
     statusDisplay.innerText = "Contributing machine..."
+    setProgress(retestCircle, 0);
     runSomething(12 * 1000, testCircle, awaitTest);
 }
 function awaitTest() {
