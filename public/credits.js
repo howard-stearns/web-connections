@@ -145,6 +145,10 @@ start.addEventListener('click', _ => {
     }
 });
 
+if ('ScreenOrientation' in window && 'lock' in ScreenOrientation) {
+    ScreenOrientation.lock("portrait");
+}
+
 switch (location.hash) {
 case '#run':
     gotoRun();
