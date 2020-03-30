@@ -10,20 +10,25 @@ const startButtonRipple = new MDCRipple(infoButton);
 
 const dialogDialog = new MDCDialog(infoDialog);
 function closeDialog() {
+    location.hash = "run";
     dialogDialog.close();
 }
-infoButton.addEventListener('click', e => {
+function gotoInfo() {
     dialogDialog.open();
     setTimeout(_ => infoButton.blur(), 100);
-});
+    location.hash = "info"
+}
+infoButton.addEventListener('click', gotoInfo);
 done.addEventListener('click', closeDialog);
 
-next.addEventListener('click', _ => {
+function gotoRun() {
     const surface = document.querySelector('.screen-transition__surface'),
           classes = surface.classList;
+    location.hash = "run"
     classes.remove('screen-transition__surface--0')
     classes.add('screen-transition__surface--1');
-});
+}
+next.addEventListener('click', gotoRun);
 
 function initRing(circle, overallDiameter, strokeWidth, color) {    
     const parent = circle.parentElement;
@@ -139,3 +144,18 @@ start.addEventListener('click', _ => {
         label.innerText = "start";
     }
 });
+
+switch (location.hash) {
+case '#run':
+    gotoRun();
+    break;
+case '#info':
+    gotoRun();
+    gotoInfo();
+    break;
+case '':
+case '#':
+    break;
+default:
+    console.warn(`Unrecognized fragment identifier '${location.hash}'.`);
+}
