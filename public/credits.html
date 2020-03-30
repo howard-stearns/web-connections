@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Web Connections Test</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css">
+    <link href="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="credits.css">
+    <script src="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.js"></script>
+  </head>
+  <body class="mdc-typography">
+    <section class="screen-transition screen-transition__container">
+      <section class="screen-transition screen-transition__surface screen-transition__surface--0">
+        <section class="screen-transition screen-transition__screen">
+          <div id="welcome" class="centered-text">
+            <h2>Welcome!</h2>
+            <p><span class="Bigworld"></span> is a virtual world powered by contributed devices.</p>
+            <p>You can help!</p>
+            <p>Enlist your machine in the cause and we will give you <span class="credits"></span> that you will then be able to spend or transfer to others in this new world.</p>
+          </div>
+            <!-- NEXT Button -->
+            <button id="next" class="mdc-fab mdc-fab--extended credits-fab">  
+              <div class="mdc-fab__ripple"></div>
+              <span class="mdc-fab__label">next</span>
+            </button>
+        </section>
+        <section class="screen-transition screen-transition__screen">
+          <!-- INFO BUTTON AND DIALOG  -->
+          <!-- Info Button -->
+          <div class="clearfix">
+            <button id="infoButton" class="mdc-icon-button material-icons credits-info">info_outline</button>
+          </div>
+          <!-- Info Dialog -->
+          <div id="infoDialog" class="mdc-dialog">
+            <div class="mdc-dialog__container">
+              <div class="mdc-dialog__surface"
+                   role="alertdialog"
+                   aria-modal="true"
+                   aria-labelledby="my-dialog-title"
+                   aria-describedby="my-dialog-content">
+                <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+                <h2 class="mdc-dialog__title" id="my-dialog-title"><i class="material-icons">info_outline</i> BIG WORLD</h2>
+                <div class="mdc-dialog__content" id="my-dialog-content">
+                  <div class="fab-scroll-content">
+                    <div class="mdc-typography mdc-typography--body1">
+                      <p><span class="Bigworld"></span> is a virtual world running on contributed devices.</p>
+                      <p>We need your help!</p>
+                      <p>Enlist your machine in the cause and we will give you <span class="credits"></span> that you will then be able to spend or transfer to others in this new world.</p>
+                      <p>When you enlist your machine, we are testing it for the following things:</p>
+                    </div>
+                    <div class="mdc-typography mdc-typography--body2">
+                      <p>Type of computer/device</p>
+                      <p>Latency - ping time / host fast can device respond</p>
+                      <p>Bandwidth throughput - how quickly can data go from A to B</p>
+                      <p>% of devices behind a firwwall (i.e., use RTC data to show when a TURN server is in play</p>
+                      <p>Availability - How long the web app is running</p>
+                      <div class="fab-scroll-content__spacer"></div>
+                    </div>
+                    <!-- DONE Button -->
+                    <button id="done" class="mdc-fab mdc-fab--extended credits-fab">
+                      <div class="mdc-fab__ripple"></div>
+                      <span class="mdc-fab__label">done</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="mdc-dialog__scrim"></div>
+          </div>
+
+          <!-- MAIN CONTENT -->
+          <div class="centered-text">
+
+            <h5 id="statusDisplay" class="mdc-typography mdc-typography--headline5">&nbsp;</h5>
+
+            <div class="progress-group progress-group__container">
+              <div class="progress-group progress-group__progress">
+                <svg
+                  id="retestRing"
+                  class="progress-ring"
+                  width="300"
+                  height="300">
+                  <circle
+                    id="outerBorder"
+                    class="progress-ring__circle"
+                    fill="transparent">
+                  </circle>
+                  <circle
+                    id="retestCircle"
+                    class="progress-ring__circle"
+                    fill="transparent">
+                  </circle>
+                  <circle
+                    id="middleBorder"
+                    class="progress-ring__circle"
+                    fill="transparent">
+                  </circle>
+                  <circle
+                    id="testCircle"
+                    class="progress-ring__circle"
+                    fill="transparent">
+                  </circle>
+                  <circle
+                    id="innerBorder"
+                    class="progress-ring__circle"
+                    fill="transparent">
+                  </circle>
+                  <circle
+                    class="progress-ring__scrim"
+                    fill="#CFD8DC"
+                    stroke-width="0"
+                    cx="150"
+                    cy="150"
+                    r="108">
+                  </circle>                  
+                </svg>
+              </div>
+
+              <div class="progress-group progress-group__text">
+                <div class="credits-light-card">
+                  <div class="mdc-card__secondary mdc-typography mdc-typography--body1">Your Credits</div>
+                  <div class="mdc-card__primary">
+                    <div id="creditsRecorded" class="mdc-card__title mdc-typography mdc-typography--headline4">000,000,000</div>
+                  </div>
+                </div>
+                
+                <div class="credits-light-card">
+                  <div class="mdc-card__secondary mdc-typography mdc-typography--body2">Your credits after next job</div>
+                  <div class="mdc-card__primary">
+                    <div id="creditsEstimated" class="mdc-card__title mdc-typography mdc-typography--headline6">000,000,000</div>
+                  </div>
+                </div>
+
+                <div class="credits-light-card">
+                  <div class="mdc-card__secondary mdc-typography mdc-typography--body2">Total contributions to date</div>
+                  <div class="mdc-card__primary">
+                    <div id="creditsCombined" class="mdc-card__title mdc-typography mdc-typography--headline6">123,456,789</div>
+                  </div>
+                </div>
+              </div>              
+            </div>
+          </div>
+
+          <!-- START Button -->
+          <button id="start" class="mdc-fab mdc-fab--extended credits-fab">  
+            <div class="mdc-fab__ripple"></div>
+            <span class="mdc-fab__label">start</span>
+          </button>
+        </section>
+      </section>
+    </section>
+
+    <script src="credits.js"></script>
+  </body>
+</html>

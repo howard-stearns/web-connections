@@ -1,0 +1,130 @@
+html, body {
+  height: 100%;
+}
+
+body {
+    margin: 0;
+    padding-top: 0.1px; /* Prevent header h1 margin from pushing body down*/
+}
+
+#welcome {
+    margin: 20px;
+}
+#statusDisplay {
+    margin-top: 10px;
+    margin-bottom: 20px;
+}
+.clearfix::after {
+  content: "";
+  clear: both;
+  display: table;
+}
+
+.centered-text {
+    text-align: center;
+}
+
+.credits-info {
+    font-size: 36px;
+    float: right;
+    margin: 10px;
+    padding: 0;
+}
+
+.credits-fab {
+    position: absolute;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.Bigworld {
+    color: var(--mdc-theme-primary);
+}
+.Bigworld::after {
+  content: "Bigworld";
+}
+.credits {
+    color: #FBC02D;
+}
+.credits::after {
+  content: "Credits";
+}
+
+/* There is a FAB with absolute positioning at the bottom of a scroller.
+   This container provides an parent for absolute positioning.*/
+#infoDialog .mdc-dialog__surface  {  
+    position: relative;
+}
+/* Create some space "under" the FAB, so that the scroller does not put text there.*/
+.fab-scroll-content__spacer {
+    height: 75px;
+}
+
+.screen-transition__container {
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+}
+.screen-transition__surface {
+    height: 100%;    
+    width: calc(100% * var(--nScreens));
+    position: relative; /* So that those n screen-transition__screen children are relative to this. */
+    transition: left 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+.screen-transition__surface--0 { left: 0; }
+.screen-transition__surface--1 { left: -100%; }
+.screen-transition__surface--2 { left: -200%; }
+.screen-transition__surface--3 { left: -300%; }
+.screen-transition__surface--4 { left: -400%; }
+.screen-transition__surface--5 { left: -500%; }
+.screen-transition__screen {
+    height: 100%;
+    width: calc(100% / var(--nScreens));
+    float: left;
+    position: relative; /* So that contained FABs track stay within us. */
+}
+
+.screen-transition__container {
+    --nScreens: 2;
+}
+
+.credits-light-card {
+    width: 100%;
+}
+
+.progress-group__container {
+    /* background-color: #CFD8DC; */
+    height: 300px;
+    width: 300px;
+    position: relative;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.progress-group__progress {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}    
+
+.progress-group__text {
+    position: absolute;
+    top: 70px;
+    width: 100%;
+}
+
+.progress-ring {
+  
+}
+
+.progress-ring__circle {
+  transition: 0.15s stroke-dashoffset;
+  /* axis compensation*/
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
