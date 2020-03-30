@@ -145,8 +145,8 @@ start.addEventListener('click', _ => {
     }
 });
 
-if ('ScreenOrientation' in window && 'lock' in ScreenOrientation) {
-    ScreenOrientation.lock("portrait");
+if ('screen' in window && 'orientation' in screen) {
+    screen.orientation.lock("portrait").catch(console.log);
 }
 
 switch (location.hash) {
