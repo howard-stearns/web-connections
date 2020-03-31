@@ -9,17 +9,13 @@ const startButtonRipple = new MDCRipple(infoButton);
 
 
 const dialogDialog = new MDCDialog(infoDialog);
-function closeDialog() {
-    location.hash = "run";
-    dialogDialog.close();
-}
+infoDialog.addEventListener('MDCDialog:closed', _ => location.hash = "run");
 function gotoInfo() {
     dialogDialog.open();
     setTimeout(_ => infoButton.blur(), 100);
     location.hash = "info"
 }
 infoButton.addEventListener('click', gotoInfo);
-done.addEventListener('click', closeDialog);
 
 function gotoRun() {
     const surface = document.querySelector('.screen-transition__surface'),

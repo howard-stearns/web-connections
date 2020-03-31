@@ -45,10 +45,8 @@
                    aria-modal="true"
                    aria-labelledby="my-dialog-title"
                    aria-describedby="my-dialog-content">
-                <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
                 <h2 class="mdc-dialog__title" id="my-dialog-title"><i class="material-icons">info_outline</i> BIG WORLD</h2>
                 <div class="mdc-dialog__content" id="my-dialog-content">
-                  <div class="fab-scroll-content">
                     <div class="mdc-typography mdc-typography--body1">
                       <p><span class="Bigworld"></span> is a virtual world running on contributed devices.</p>
                       <p>We need your help!</p>
@@ -61,15 +59,14 @@
                       <p>Bandwidth throughput - how quickly can data go from A to B</p>
                       <p>% of devices behind a firwwall (i.e., use RTC data to show when a TURN server is in play</p>
                       <p>Availability - How long the web app is running</p>
-                      <div class="fab-scroll-content__spacer"></div>
                     </div>
-                    <!-- DONE Button -->
-                    <button id="done" class="mdc-fab mdc-fab--extended credits-fab">
-                      <div class="mdc-fab__ripple"></div>
-                      <span class="mdc-fab__label">done</span>
-                    </button>
-                  </div>
                 </div>
+                <footer class="mdc-dialog__actions">
+                  <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="close">
+                    <div class="mdc-button__ripple"></div>
+                    <span class="mdc-button__label">done</span>
+                  </button>
+                </footer>
               </div>
             </div>
             <div class="mdc-dialog__scrim"></div>

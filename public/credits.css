@@ -7,6 +7,23 @@ body {
     padding-top: 0.1px; /* Prevent header h1 margin from pushing body down*/
 }
 
+/* Browsers don't implement screen.orientation.lock("portrait") yet, so
+   when a mobile device (pointer: coarse) is in landscape, force the
+   orientation back the the other way. */
+@media only screen and (pointer: coarse) and (orientation: landscape) {
+  body {
+    width: 100vh;
+    height: 100vw;
+    transform-origin: 0 0;
+    transform: rotate(-90deg) translateX(-100%);;
+  }
+  .mdc-dialog .mdc-dialog__surface {
+      /* Alas, mdc hardcodes max-width to use 100vw.
+         That's fine for portrait, but in landscape, we need to override to 100vh. */
+      max-width: calc(100vh - 32px) !important;
+  }
+}
+
 #welcome {
     margin: 20px;
 }
@@ -51,15 +68,6 @@ body {
   content: "Credits";
 }
 
-/* There is a FAB with absolute positioning at the bottom of a scroller.
-   This container provides an parent for absolute positioning.*/
-#infoDialog .mdc-dialog__surface  {  
-    position: relative;
-}
-/* Create some space "under" the FAB, so that the scroller does not put text there.*/
-.fab-scroll-content__spacer {
-    height: 75px;
-}
 
 .screen-transition__container {
     overflow: hidden;
