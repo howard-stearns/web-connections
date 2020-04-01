@@ -6,25 +6,7 @@ const MDCDialog = mdc.dialog.MDCDialog;
 const infoButtonRipple = new MDCRipple(infoButton);
 infoButtonRipple.unbounded = true;
 const startButtonRipple = new MDCRipple(infoButton);
-
-
 const dialogDialog = new MDCDialog(infoDialog);
-infoDialog.addEventListener('MDCDialog:closed', _ => location.hash = "run");
-function gotoInfo() {
-    dialogDialog.open();
-    setTimeout(_ => infoButton.blur(), 100);
-    location.hash = "info"
-}
-infoButton.addEventListener('click', gotoInfo);
-
-function gotoRun() {
-    const surface = document.querySelector('.screen-transition__surface'),
-          classes = surface.classList;
-    location.hash = "run"
-    classes.remove('screen-transition__surface--0')
-    classes.add('screen-transition__surface--1');
-}
-next.addEventListener('click', gotoRun);
 
 function initRing(circle, overallDiameter, strokeWidth, color) {    
     const parent = circle.parentElement;
@@ -145,17 +127,51 @@ if ('screen' in window && 'orientation' in screen) {
     screen.orientation.lock("portrait").catch(console.log);
 }
 
-switch (location.hash) {
-case '#run':
-    gotoRun();
-    break;
-case '#info':
-    gotoRun();
-    gotoInfo();
-    break;
-case '':
-case '#':
-    break;
-default:
-    console.warn(`Unrecognized fragment identifier '${location.hash}'.`);
+infoButton.addEventListener('click', _ => location.hash = "info");
+next.addEventListener('click', _ => location.hash = "run");
+infoDialog.addEventListener('MDCDialog:closed', _ => location.hash = "run");
+
+function gotoPage(pageClass) {
+    const surface = document.querySelector('.screen-transition__surface'),
+          classes = surface.classList;
+    var old, token;
+    for (token of classes) {
+        if (token.startsWith('screen-transition__surface--')) {
+            old = token;
+            break;
+        }
+    }
+    classes.replace(old, pageClass);
 }
+function gotoIntro() {
+    dialogDialog.close();
+    gotoPage('screen-transition__surface--0');
+}
+function gotoRun() {
+    dialogDialog.close();
+    gotoPage('screen-transition__surface--1');
+}
+function gotoInfo() {
+    gotoRun();
+    dialogDialog.open();
+    setTimeout(_ => infoButton.blur(), 100);
+}
+
+function gotoHash() {
+    switch (location.hash) {
+    case '#run':
+        gotoRun();
+        break;
+    case '#info':
+        gotoInfo();
+        break;
+    case '':
+    case '#':
+        gotoIntro();
+        break;
+    default:
+        console.warn(`Unrecognized fragment identifier '${location.hash}'.`);
+    }
+}
+gotoHash();
+window.addEventListener('hashchange', gotoHash);

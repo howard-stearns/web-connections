@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <style>
+      .myFrame { position: relative; width: 500px; }
+      .square { position: absolute; background-color: yellow; height: 100px; width: 100px; z-index: 100; top: 20px; right: 20px; }
+      .scrim { width: 500px; height: 400px; position: absolute; z-index: 50; background-color: grey; opacity: 0.2; }
+    </style>      
+  </head>
+  <body>
+    <h1>Here is an embedded map</h1>
+
+    <p>It has a transparent sheet over it, which blocks clicks from going through to the embedded map app.</p>
+    
+    <div class="myFrame">   <!-- Contains scrim, iframe, and controls -->
+
+      <div class="scrim"></div> <!-- Positioned over the top of the iframe, blocking clicks. -->
+
+      <!-- Go to maps.google.com, click share => "embedd a map" => "copy html" -->
+      <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1576.5564490016695!2d-122.40416116859039!3d37.78739388092013!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8085808861d2f9a9%3A0xd7cd4423fc12d999!2s720%20Market%20St%2C%20San%20Francisco%2C%20CA%2094102!5e0!3m2!1sen!2sus!4v1585759877734!5m2!1sen!2sus" width="500" height="400" frameborder="0" style="border:0;" allowfullscreen="" aria-hidden="false" tabindex="0"></iframe>
+
+      <div class="square" onclick="alert('I am active')">click me, I'm one of our buttons</div>  <!-- A control position over the top of the scrim. --> 
+    </div>
+  </body>
+</html>
