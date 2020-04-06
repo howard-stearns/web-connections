@@ -58,10 +58,11 @@ async function webcamSetup(start) {
                 setTimeout(_ => resolve(stream), 1000);
             })),
         //faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
-        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-        faceapi.nets.faceExpressionNet.loadFromUri('/models')
+
+        //faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+        //faceapi.nets.faceExpressionNet.loadFromUri('/models')
     ]);
     console.log('model', Date.now() - start);
-    webcamCapture(Date.now());
+    //webcamCapture(Date.now());
 }
 startButton.onclick = _ => webcamSetup(Date.now());
