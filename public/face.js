@@ -116,10 +116,9 @@ async function webcamCapture(start) {
         webcamVideo.srcObject = null;
         webcamVideo.parentElement.style.display = "none";
         speechSynthesis.speak(new SpeechSynthesisUtterance("Thank you. Proof of unique human is complete"));
-    } else {
+    } else {*/
         setTimeout(_ => webcamCapture(Date.now()), 2000 - (Date.now() - start));
-    }
-    */
+    //}
 }
 async function webcamSetup(start) {
     log('starting setup');
