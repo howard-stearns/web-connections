@@ -41,7 +41,6 @@ async function faceTest() {
 //faceTest();
 */
 function log(...args) {
-    return;
     const element = document.createElement('div');
     element.innerText = [...args].map(JSON.stringify).join(' ');
     statusBlock.appendChild(element);
@@ -56,8 +55,12 @@ async function webcamCapture(start) {
     log('size', displaySize);
     faceapi.matchDimensions(videoOverlay, displaySize);
     const resizedDetections = faceapi.resizeResults(groupResult, displaySize);
-    var instruction = '';
+    faceapi.draw.drawDetections(videoOverlay, resizedDetections);
+    log('detections');
+    faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
+    log('expressions');
 
+    var instruction = '';
     if (resizedDetections.length) {
         const review = resizedDetections.concat();
         review.sort((a, b) => Math.sign(a.detection.score - b.detection.score));
@@ -99,16 +102,14 @@ async function webcamCapture(start) {
     } else {
         console.log(gotNeutral && ((Date.now() - gotNeutral)), gotExpression && ((Date.now() - gotExpression)));
     }
+    log(instruction);
+
+    /*
     if (instruction && (instruction != lastInstruction) && !speechSynthesis.pending && !speechSynthesis.speaking) {
         var utterThis = new SpeechSynthesisUtterance(instruction);
         speechSynthesis.speak(utterThis);
         lastInstruction = instruction;
     }
-
-    faceapi.draw.drawDetections(videoOverlay, resizedDetections);
-    log('detections');
-    faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
-    log('expressions');
     if (gotExpression && gotNeutral) {
         music.pause();
         webcamVideo.srcObject.getTracks().forEach(track => track.stop());
@@ -118,12 +119,13 @@ async function webcamCapture(start) {
     } else {
         setTimeout(_ => webcamCapture(Date.now()), 2000 - (Date.now() - start));
     }
+    */
 }
 async function webcamSetup(start) {
     log('starting setup');
     startButton.style.display = "none";
-    music.loop = true;
-    music.play();
+    //music.loop = true;
+    //music.play();
     await Promise.all([
         navigator.mediaDevices.getUserMedia({video: true})
             .then(stream => new Promise(resolve => {
