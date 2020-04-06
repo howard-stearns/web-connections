@@ -41,7 +41,6 @@ async function faceTest() {
 //faceTest();
 */
 function log(...args) {
-    return false;
     const element = document.createElement('div');
     element.innerText = [...args].map(JSON.stringify).join(' ');
     statusBlock.appendChild(element);
@@ -58,7 +57,7 @@ async function webcamCapture(start) {
     log('detections');
     faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
     log('expressions');
-    webcamCapture(Date.now());
+    //webcamCapture(Date.now());
 }
 async function webcamSetup(start) {
     log('starting setup');
