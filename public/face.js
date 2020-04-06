@@ -42,8 +42,8 @@ async function faceTest() {
 async function webcamCapture(start) {
     const groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
     console.log('groupResult', groupResult, Date.now() - start);
-    const displaySize = { width: webcamVideo.videoWidth, height: webcamVideo.videoHeight };
-    //const displaySize = { width: webcamVideo.width, height: webcamVideo.height };
+    //const displaySize = { width: webcamVideo.videoWidth, height: webcamVideo.videoHeight };
+    const displaySize = { width: webcamVideo.width, height: webcamVideo.height };
     faceapi.matchDimensions(videoOverlay, displaySize);
     const resizedDetections = faceapi.resizeResults(groupResult, displaySize);
     faceapi.draw.drawDetections(videoOverlay, resizedDetections)
