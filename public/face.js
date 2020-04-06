@@ -1,4 +1,5 @@
 'use strict';
+/*
 console.log(faceapi.nets)
 
 async function faceTest() {
@@ -38,7 +39,8 @@ async function faceTest() {
     });
 }    
 //faceTest();
-
+*/
+/*
 async function webcamCapture(start) {
     const groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
     console.log('groupResult', groupResult, Date.now() - start);
@@ -49,7 +51,7 @@ async function webcamCapture(start) {
     faceapi.draw.drawDetections(videoOverlay, resizedDetections)
     faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
     //webcamCapture(Date.now());
-}
+}*/
 async function webcamSetup(start) {
     await Promise.all([
         navigator.mediaDevices.getUserMedia({video: true})
