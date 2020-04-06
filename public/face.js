@@ -48,7 +48,7 @@ function log(...args) {
 async function webcamCapture(start) {
     const groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
     log('groupResult', groupResult, Date.now() - start);
-    //const displaySize = { width: webcamVideo.videoWidth, height: webcamVideo.videoHeight };
+    /*
     const displaySize = { width: webcamVideo.width, height: webcamVideo.height };
     log('size', displaySize);
     faceapi.matchDimensions(videoOverlay, displaySize);
@@ -56,7 +56,7 @@ async function webcamCapture(start) {
     faceapi.draw.drawDetections(videoOverlay, resizedDetections);
     log('detections');
     faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
-    log('expressions');
+    log('expressions');*/
     //webcamCapture(Date.now());
 }
 async function webcamSetup(start) {
