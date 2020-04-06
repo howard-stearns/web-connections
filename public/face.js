@@ -116,7 +116,7 @@ async function webcamCapture(start) {
         webcamVideo.parentElement.style.display = "none";
         speechSynthesis.speak(new SpeechSynthesisUtterance("Thank you. Proof of unique human is complete"));
     } else {
-        setTimeout(_ => webcamCapture(Date.now()), 1000 - (Date.now() - start));
+        setTimeout(_ => webcamCapture(Date.now()), 2000 - (Date.now() - start));
     }
 }
 async function webcamSetup(start) {
