@@ -41,6 +41,7 @@ async function faceTest() {
 //faceTest();
 */
 function log(...args) {
+    return;
     const element = document.createElement('div');
     element.innerText = [...args].map(JSON.stringify).join(' ');
     statusBlock.appendChild(element);
@@ -104,7 +105,6 @@ async function webcamCapture(start) {
     }
     log(instruction);
 
-    /*
     if (instruction && (instruction != lastInstruction) && !speechSynthesis.pending && !speechSynthesis.speaking) {
         var utterThis = new SpeechSynthesisUtterance(instruction);
         speechSynthesis.speak(utterThis);
@@ -116,15 +116,15 @@ async function webcamCapture(start) {
         webcamVideo.srcObject = null;
         webcamVideo.parentElement.style.display = "none";
         speechSynthesis.speak(new SpeechSynthesisUtterance("Thank you. Proof of unique human is complete"));
-    } else {*/
-        setTimeout(_ => webcamCapture(Date.now()), 2000 - (Date.now() - start));
-    //}
+    } else {
+        setTimeout(_ => webcamCapture(Date.now()), 1000 - (Date.now() - start));
+    }
 }
 async function webcamSetup(start) {
     log('starting setup');
     startButton.style.display = "none";
-    //music.loop = true;
-    //music.play();
+    music.loop = true;
+    music.play();
     await Promise.all([
         navigator.mediaDevices.getUserMedia({video: true})
             .then(stream => new Promise(resolve => {
