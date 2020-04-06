@@ -64,4 +64,4 @@ async function webcamSetup(start) {
     console.log('model', Date.now() - start);
     webcamCapture(Date.now());
 }
-webcamSetup();
+startButton.onclick = webcamSetup;
