@@ -41,6 +41,7 @@ async function faceTest() {
 //faceTest();
 */
 function log(...args) {
+    return false;
     const element = document.createElement('div');
     element.innerText = [...args].map(JSON.stringify).join(' ');
     statusBlock.appendChild(element);
@@ -48,8 +49,8 @@ function log(...args) {
 async function webcamCapture(start) {
     const groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
     log('groupResult', groupResult, Date.now() - start);
-    const displaySize = { width: webcamVideo.videoWidth, height: webcamVideo.videoHeight };
-    //const displaySize = { width: webcamVideo.width, height: webcamVideo.height };
+    //const displaySize = { width: webcamVideo.videoWidth, height: webcamVideo.videoHeight };
+    const displaySize = { width: webcamVideo.width, height: webcamVideo.height };
     log('size', displaySize);
     faceapi.matchDimensions(videoOverlay, displaySize);
     const resizedDetections = faceapi.resizeResults(groupResult, displaySize);
@@ -57,7 +58,7 @@ async function webcamCapture(start) {
     log('detections');
     faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
     log('expressions');
-    //webcamCapture(Date.now());
+    webcamCapture(Date.now());
 }
 async function webcamSetup(start) {
     log('starting setup');
