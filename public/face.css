@@ -7,3 +7,18 @@
     top: 0;
     z-index: 10;
 }
+.centered {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.instructions {
+    text-align: center;
+}
+audio {
+    display: none;
+}
+video {
+    max-width: 480px;
+    height: auto;
+}

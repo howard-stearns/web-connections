@@ -41,25 +41,89 @@ async function faceTest() {
 //faceTest();
 */
 function log(...args) {
+    return;
     const element = document.createElement('div');
     element.innerText = [...args].map(JSON.stringify).join(' ');
     statusBlock.appendChild(element);
 }
+var lastInstruction = '';
+var gotNeutral = false;
+var gotExpression = false;
 async function webcamCapture(start) {
     const groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
     log('groupResult', groupResult, Date.now() - start);
-    const displaySize = { width: webcamVideo.width, height: webcamVideo.height };
+    const displaySize = { width: webcamVideo.offsetWidth, height: webcamVideo.offsetHeight };
     log('size', displaySize);
     faceapi.matchDimensions(videoOverlay, displaySize);
     const resizedDetections = faceapi.resizeResults(groupResult, displaySize);
+    var instruction = '';
+
+    if (resizedDetections.length) {
+        const review = resizedDetections.concat();
+        review.sort((a, b) => Math.sign(a.detection.score - b.detection.score));
+        const box = review[0].detection.box;
+        const margin = 10;
+        if ((box.height < displaySize.height / 2)) {
+            instruction = "Move closer, please";
+        } else if (box.left < margin) {
+            instruction = "Move left";
+        } else if (box.top < margin) {
+            instruction = "Move down";
+        } else if (box.right > displaySize.width - margin) {
+            instruction = "Move right";
+        } else if (box.bottom > displaySize.height - margin) {
+            instruction = "Move up";
+        } else {
+            const expressions = review[0].expressions;
+            if (['happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised'].some(x => expressions[x] > 0.05)) {
+                if (!gotExpression) {
+                    gotExpression= Date.now();
+                    console.log('gotExpression');
+                }
+            } else if (expressions.neutral > 0.9) {
+                if (!gotNeutral) {
+                    gotNeutral = Date.now();
+                    console.log('gotNeutral');
+                }
+            }
+        }
+    } else {
+        instruction = "Please move back a bit";
+    }
+    if (instruction) {
+        gotNeutral = gotExpression = false;
+    } else if (!gotExpression && gotNeutral && ((Date.now() - gotNeutral) > 2000)) {
+        instruction = "Please smile, or make a face";
+    } else if (!gotNeutral && gotExpression && ((Date.now() - gotExpression) > 2000)) {
+        instruction = "Please have a neutral expression";
+    } else {
+        console.log(gotNeutral && ((Date.now() - gotNeutral)), gotExpression && ((Date.now() - gotExpression)));
+    }
+    if (instruction && (instruction != lastInstruction) && !speechSynthesis.pending && !speechSynthesis.speaking) {
+        var utterThis = new SpeechSynthesisUtterance(instruction);
+        speechSynthesis.speak(utterThis);
+        lastInstruction = instruction;
+    }
+
     faceapi.draw.drawDetections(videoOverlay, resizedDetections);
     log('detections');
     faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
     log('expressions');
-    setTimeout(_ => webcamCapture(Date.now()), 1000 - (Date.now() - start));
+    if (gotExpression && gotNeutral) {
+        music.pause();
+        webcamVideo.srcObject.getTracks().forEach(track => track.stop());
+        webcamVideo.srcObject = null;
+        webcamVideo.parentElement.style.display = "none";
+        speechSynthesis.speak(new SpeechSynthesisUtterance("Thank you. Proof of unique human is complete"));
+    } else {
+        setTimeout(_ => webcamCapture(Date.now()), 1000 - (Date.now() - start));
+    }
 }
 async function webcamSetup(start) {
     log('starting setup');
+    startButton.style.display = "none";
+    music.loop = true;
+    music.play();
     await Promise.all([
         navigator.mediaDevices.getUserMedia({video: true})
             .then(stream => new Promise(resolve => {

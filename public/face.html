@@ -4,31 +4,29 @@
     <title>Face Detection Test</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css">
     <link rel="stylesheet" href="face.css">
     <script src="face-api.min.js"></script>
   </head>
   <body>
-    <button id="startButton">start</button>
-    <div class="overlaidMedia">
-      <!-- <img id="webcamVideo" src="images/bbt1.jpg"/> -->
-      <video id="webcamVideo" autoplay playsinline height="480" width="480"></video>
-      <canvas id="videoOverlay"></canvas>
+    <div class="instructions">
+      <p>We use a selfie to ensure your security. It is used to label registrations on this computer, but it is not shown to any other users, nor is it sold to any other companies.</p>
+      <p>Sound on, please, and press...</p>
     </div>
-    <div id="statusBlock"></status>
-    
-    <!-- <div class="overlaidMedia"> -->
-    <!--   <img id="group" src="images/bbt1.jpg"/> -->
-    <!--   <canvas id="groupCanvas"></canvas> -->
-    <!-- </div> -->
-    <!-- <img id="sheldonXpng" src="images/sheldonX.png"/> -->
+    <div class="centered">
+      <button id="startButton">open camera</button>
+    </div>
+    <div class="centered">
+      <div class="overlaidMedia">
+        <video id="webcamVideo" autoplay playsinline"></video>
+        <canvas id="videoOverlay"></canvas>
+      </div>
+    </div>
+    <audio id="music" controls autoplay>
+      <source src="2-162 Nothing Compares 2 U.mp3" type="audio/mpeg"/>
+    </audio>
+    <div id="statusBlock"></div>
 
-    <!-- <img id="group2" src="images/bbt5.jpg"/> -->
-    <!-- <img id="sheldonXjpg" src="images/sheldonX.jpg"/>     -->
-    <!-- <img id="sheldon1" src="images/sheldon1.png"/> -->
-    <!-- <img id="sheldon2" src="images/sheldon2.png"/> -->
-    <!-- <img id="sheldon3" src="images/sheldon3.png"/> -->
-    <!-- <img id="sheldon4" src="images/sheldon4.png"/> -->
-    <!-- <img id="sheldon5" src="images/sheldon5.png"/> -->
     <script src="face.js"></script>
   </body>
 </html>
