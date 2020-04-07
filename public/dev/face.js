@@ -99,7 +99,9 @@ async function webcamCapture(start) {
     if (face) {
         const box = face.detection.box;
         const margin = 10;
-        if ((box.height < displaySize.height / 2)) {
+        if (displaySize.height < displaySize.width
+            ? (box.height < displaySize.height / 2)
+            : (box.width < displaySize.width / 2)) {
             instruction = "Move closer, please";
         } else if (box.left < margin) {
             instruction = "Move left";
