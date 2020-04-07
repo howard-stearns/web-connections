@@ -21,9 +21,9 @@ video {
     height: auto;
 }
 
-@media (min-width: 380px) {
+@media (min-width: 300px) {
     video {
-        max-width: 380px;
+        max-width: 300px;
         height: auto;
     }
 }

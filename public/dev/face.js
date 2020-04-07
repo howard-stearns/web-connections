@@ -77,7 +77,7 @@ function foo() {
 async function webcamCapture(start) {
     var groupResult, timeout = setTimeout(_ => alert('Timeout waiting for faces to be computed!'), 5000);
     try {
-        groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions({inputSize: 160})).withFaceExpressions();
+        groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions({inputSize: 128})).withFaceExpressions();
     } catch (e) {
         alert(`Error in computing faces: ${e.message || e}`);
     }
