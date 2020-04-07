@@ -51,7 +51,6 @@ if (!window.speechSynthesis) { alert('This browser does not support speech!'); }
 if (!navigator.mediaDevices) { alert('This browser does not support webcams!'); }
 
 function speak(text) {
-    return; //fixme
     var utterThis = new SpeechSynthesisUtterance(text);
     function onError(event) {
         alert(`Error while telling you "${text}": ${event.error}`);
