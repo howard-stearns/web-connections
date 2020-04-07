@@ -69,10 +69,6 @@ function bestFace(detections) { // Return the highest scoring face from dections
 }
 var lastInstruction = '';
 var gotNeutral = false, gotExpression = false, gotFail = false;
-function foo() {
-    console.log('start foo');
-    return new Promise((resolve, reject) => setTimeout(_ => {console.log('resolving empty'); reject("hrs");}, 500));
-}
 async function webcamCapture(start) {
     var groupResult, timeout = setTimeout(_ => alert('Timeout waiting for faces to be computed!'), 5000);
     try {
@@ -117,18 +113,18 @@ async function webcamCapture(start) {
             if (['happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised'].some(x => expressions[x] > 0.05)) {
                 if (!gotExpression) {
                     gotExpression = now;
-                    console.log('gotExpression');
+                    //console.log('gotExpression');
                 }
             } else if (expressions.neutral > 0.9) {
                 if (!gotNeutral) {
                     gotNeutral = now;
-                    console.log('gotNeutral');
+                    //console.log('gotNeutral');
                 }
             }
         }
     } else if (!gotFail) {
         gotFail = now;
-        console.log('gotFail');
+        //console.log('gotFail');
     }
     if (expired(gotFail)) {
         instruction = "Make sure there is enough light, and that you can see your face in the center of the video";
@@ -140,7 +136,7 @@ async function webcamCapture(start) {
     } else if (!gotNeutral && expired(gotExpression)) {
         instruction = "Please have a neutral expression";
     } else {
-        console.log('neutral:', gotNeutral && (now - gotNeutral), 'expression:', gotExpression && (now - gotExpression));
+        //console.log('neutral:', gotNeutral && (now - gotNeutral), 'expression:', gotExpression && (now - gotExpression));
     }
     log(instruction);
 
@@ -151,15 +147,16 @@ async function webcamCapture(start) {
     if (gotExpression && gotNeutral) {
         webcamStop();
     } else { // Throttled repeat
-        const INTENDED_MAX_INTERVAL_MS = 1000, now = Date.now(), elapsed = now - start;
-        setTimeout(_ => webcamCapture(now), INTENDED_MAX_INTERVAL_MS - elapsed);
+        const INTENDED_MAX_INTERVAL_MS = 1000, MIN_MS = 100, elapsed = now - start;
+        console.log(elapsed, instruction, gotExpression, gotNeutral, gotFail);
+        setTimeout(_ => webcamCapture(now), Math.max(MIN_MS, INTENDED_MAX_INTERVAL_MS - elapsed));
     }
 }
 async function webcamSetup(start) {
     log('starting setup');
     document.querySelector('.instructions').style.display = "none";
-    music.loop = true;
-    music.play();
+    //music.loop = true;
+    //music.play();
     speak("Thank you.");
     const loadFail = setTimeout(_ => alert(webcamVideo.srcObject
                                            ? 'Unable to load AI models.'
@@ -182,7 +179,7 @@ async function webcamSetup(start) {
     webcamCapture(Date.now());
 }
 function webcamStop() {
-    music.pause();
+    //music.pause();
     webcamVideo.srcObject.getTracks().forEach(track => track.stop());
     webcamVideo.srcObject = null;
     webcamVideo.parentElement.style.display = "none";
