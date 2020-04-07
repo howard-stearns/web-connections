@@ -156,11 +156,17 @@ const models = Promise.all([
     console.log('model load:', Date.now() - loadStart);
 });
 
+// iOS can't handle playing music and processing video. It freezes.
+var playMusic = !navigator.userAgent.includes('iPhone') && !navigator.userAgent.includes('iPad');
+if (playMusic) music.src = "game-start.mp3";
+
 async function webcamSetup(start) {
     log('starting setup');
     document.querySelector('.instructions').style.display = "none";
-    music.loop = true;
-    music.play();
+    if (playMusic) {
+        music.loop = true;
+        music.play();
+    }
     speak("Let's go.");
     const loadFail = setTimeout(_ => alert('We were not able to access your webcam!'), 7000);
     await Promise.all([
@@ -179,7 +185,7 @@ async function webcamSetup(start) {
     webcamCapture(now);
 }
 function webcamStop() {
-    music.pause();
+    if (playMusic) music.pause();
     webcamVideo.srcObject.getTracks().forEach(track => track.stop());
     webcamVideo.srcObject = null;
     webcamVideo.parentElement.style.display = "none";
