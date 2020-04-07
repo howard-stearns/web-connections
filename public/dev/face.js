@@ -158,8 +158,8 @@ async function webcamCapture(start) {
 async function webcamSetup(start) {
     log('starting setup');
     document.querySelector('.instructions').style.display = "none";
-    //music.loop = true;
-    //music.play();
+    music.loop = true;
+    music.play();
     speak("Thank you.");
     const loadFail = setTimeout(_ => alert(webcamVideo.srcObject
                                            ? 'Unable to load AI models.'
@@ -182,7 +182,7 @@ async function webcamSetup(start) {
     webcamCapture(Date.now());
 }
 function webcamStop() {
-    //music.pause();
+    music.pause();
     webcamVideo.srcObject.getTracks().forEach(track => track.stop());
     webcamVideo.srcObject = null;
     webcamVideo.parentElement.style.display = "none";
