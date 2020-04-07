@@ -123,7 +123,7 @@ async function webcamCapture(start) {
         gotFail = now + TIMEOUT_MS;
     }
     if (expired(gotFail)) {
-        instruction = "Make sure there is enough light, and that you can see your face in the center of the video";
+        instruction = "Make sure there is enough light, and that you can see your face with a box in the center of the video";
     }
     if (instruction) {
         gotNeutral = gotExpression = gotFail = false;
@@ -159,8 +159,8 @@ const models = Promise.all([
 async function webcamSetup(start) {
     log('starting setup');
     document.querySelector('.instructions').style.display = "none";
-    //music.loop = true;
-    //music.play();
+    music.loop = true;
+    music.play();
     speak("Let's go.");
     const loadFail = setTimeout(_ => alert('We were not able to access your webcam!'), 7000);
     await Promise.all([
@@ -179,7 +179,7 @@ async function webcamSetup(start) {
     webcamCapture(now);
 }
 function webcamStop() {
-    //music.pause();
+    music.pause();
     webcamVideo.srcObject.getTracks().forEach(track => track.stop());
     webcamVideo.srcObject = null;
     webcamVideo.parentElement.style.display = "none";
