@@ -155,7 +155,7 @@ async function webcamCapture(start) {
 }
 async function webcamSetup(start) {
     log('starting setup');
-    startButton.style.display = "none";
+    document.querySelector('.instructions').style.display = "none";
     music.loop = true;
     music.play();
     speak("Thank you.");

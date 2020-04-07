@@ -15,7 +15,15 @@
 .instructions {
     text-align: center;
 }
+
 video {
     max-width: 100%;
     height: auto;
+}
+
+@media (min-width: 380px) {
+    video {
+        max-width: 380px;
+        height: auto;
+    }
 }
