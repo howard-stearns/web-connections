@@ -60,6 +60,22 @@ function speak(text) {
     speechSynthesis.speak(utterThis);
 }
 
+var displaySize;
+async function findFaces(start) {
+    var groupResult, resizedDetections, timeout = setTimeout(_ => alert('Timeout waiting for faces to be computed!'), 5000);
+    try {
+        groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions({inputSize: 128})).withFaceExpressions();
+        faceapi.matchDimensions(videoOverlay, displaySize); // Clears overlay, so it has to be done each loop
+        resizedDetections = faceapi.resizeResults(groupResult, displaySize);
+        faceapi.draw.drawDetections(videoOverlay, resizedDetections);
+        faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
+    } catch (e) {
+        alert(`Error in computing faces: ${e.message || e}`);
+    }
+    clearTimeout(timeout);
+    return resizedDetections;
+}
+
 function bestFace(detections) { // Return the highest scoring face from dections array.
     if (detections.length > 1) {
         review = review.concat(); // copy
@@ -67,30 +83,13 @@ function bestFace(detections) { // Return the highest scoring face from dections
     }
     return detections[0];
 }
-var lastInstruction = '';
-var gotNeutral = false, gotExpression = false, gotFail = false;
+var lastInstruction = '', gotNeutral = false, gotExpression = false, gotFail = false;
 async function webcamCapture(start) {
-    var groupResult, timeout = setTimeout(_ => alert('Timeout waiting for faces to be computed!'), 5000);
-    try {
-        groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions({inputSize: 128})).withFaceExpressions();
-    } catch (e) {
-        alert(`Error in computing faces: ${e.message || e}`);
-    }
-    clearTimeout(timeout);
-    log('groupResult', groupResult, Date.now() - start);
-    const displaySize = { width: webcamVideo.offsetWidth, height: webcamVideo.offsetHeight };
-    log('size', displaySize);
-    faceapi.matchDimensions(videoOverlay, displaySize);
-    const resizedDetections = faceapi.resizeResults(groupResult, displaySize);
-    faceapi.draw.drawDetections(videoOverlay, resizedDetections);
-    log('detections');
-    faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
-    log('expressions');
-
-    var instruction = '';
+    const resizedDetections = await findFaces(start);
     const face = bestFace(resizedDetections), now = Date.now(), TIMEOUT_MS = 2000;
-    function expired(value) {
-        return value && ((now - value) > TIMEOUT_MS);
+    var instruction = '';
+    function expired(expires) {
+        return expires && (now > expires);
     }
     if (face) {
         const box = face.detection.box;
@@ -112,19 +111,16 @@ async function webcamCapture(start) {
             gotFail = false;
             if (['happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised'].some(x => expressions[x] > 0.05)) {
                 if (!gotExpression) {
-                    gotExpression = now;
-                    //console.log('gotExpression');
+                    gotExpression = now + TIMEOUT_MS;
                 }
             } else if (expressions.neutral > 0.9) {
                 if (!gotNeutral) {
-                    gotNeutral = now;
-                    //console.log('gotNeutral');
+                    gotNeutral = now + TIMEOUT_MS;
                 }
             }
         }
     } else if (!gotFail) {
-        gotFail = now;
-        //console.log('gotFail');
+        gotFail = now + TIMEOUT_MS;
     }
     if (expired(gotFail)) {
         instruction = "Make sure there is enough light, and that you can see your face in the center of the video";
@@ -135,10 +131,7 @@ async function webcamCapture(start) {
         instruction = "Please smile, or make a face";
     } else if (!gotNeutral && expired(gotExpression)) {
         instruction = "Please have a neutral expression";
-    } else {
-        //console.log('neutral:', gotNeutral && (now - gotNeutral), 'expression:', gotExpression && (now - gotExpression));
     }
-    log(instruction);
 
     if (instruction && (instruction != lastInstruction) && !speechSynthesis.pending && !speechSynthesis.speaking) {
         speak(instruction);
@@ -152,16 +145,24 @@ async function webcamCapture(start) {
         setTimeout(_ => webcamCapture(now), Math.max(MIN_MS, INTENDED_MAX_INTERVAL_MS - elapsed));
     }
 }
+const loadStart = Date.now();
+const modelsTimeout = setTimeout(_ => alert("Unable to load AI models."), 5000);
+const models = Promise.all([
+    //faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
+    faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+    faceapi.nets.faceExpressionNet.loadFromUri('/models')
+]).then(_ => {
+    clearTimeout(modelsTimeout);
+    console.log('model load:', Date.now() - loadStart);
+});
+
 async function webcamSetup(start) {
     log('starting setup');
     document.querySelector('.instructions').style.display = "none";
     //music.loop = true;
     //music.play();
-    speak("Thank you.");
-    const loadFail = setTimeout(_ => alert(webcamVideo.srcObject
-                                           ? 'Unable to load AI models.'
-                                           : 'We were not able to access your webcam!'),
-                                7000);
+    speak("Let's go.");
+    const loadFail = setTimeout(_ => alert('We were not able to access your webcam!'), 7000);
     await Promise.all([
         navigator.mediaDevices.getUserMedia({video: true})
             .then(stream => new Promise(resolve => {
@@ -169,14 +170,13 @@ async function webcamSetup(start) {
                 webcamVideo.onloadedmetadata = _ => resolve(stream);
             }))
             .catch(e => alert('Unable to access to Webcam!')),
-        //faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
-
-        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-        faceapi.nets.faceExpressionNet.loadFromUri('/models')
+        models
     ]);
     clearTimeout(loadFail);
-    log('model', Date.now() - start);
-    webcamCapture(Date.now());
+    displaySize = { width: webcamVideo.offsetWidth, height: webcamVideo.offsetHeight };
+    const now = Date.now();
+    console.log('setup', now - start);
+    webcamCapture(now);
 }
 function webcamStop() {
     //music.pause();
