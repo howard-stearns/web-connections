@@ -46,28 +46,57 @@ function log(...args) {
     element.innerText = [...args].map(JSON.stringify).join(' ');
     statusBlock.appendChild(element);
 }
-var lastInstruction = '';
-var gotNeutral = false;
-var gotExpression = false;
-async function webcamCapture(start) {
-    const groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
-    log('groupResult', groupResult, Date.now() - start);
-    const displaySize = { width: webcamVideo.offsetWidth, height: webcamVideo.offsetHeight };
-    log('size', displaySize);
-    faceapi.matchDimensions(videoOverlay, displaySize);
-    const resizedDetections = faceapi.resizeResults(groupResult, displaySize);
-    faceapi.draw.drawDetections(videoOverlay, resizedDetections);
-    log('detections');
-    faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
-    log('expressions');
 
+if (!window.speechSynthesis) { alert('This browser does not support speech!'); }
+if (!navigator.mediaDevices) { alert('This browser does not support webcams!'); }
+
+function speak(text) {
+    var utterThis = new SpeechSynthesisUtterance(text);
+    function onError(event) {
+        alert(`Error while telling you "${text}": ${event.error}`);
+    }
+    utterThis.onerror = onError;
+    utterThis.volume = 1;
+    speechSynthesis.speak(utterThis);
+}
+
+var displaySize;
+async function findFaces(start) {
+    var groupResult, resizedDetections, timeout = setTimeout(_ => alert('Timeout waiting for faces to be computed!'), 5000);
+    try {
+        groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions({inputSize: 128})).withFaceExpressions();
+        faceapi.matchDimensions(videoOverlay, displaySize); // Clears overlay, so it has to be done each loop
+        resizedDetections = faceapi.resizeResults(groupResult, displaySize);
+        faceapi.draw.drawDetections(videoOverlay, resizedDetections);
+        faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
+    } catch (e) {
+        alert(`Error in computing faces: ${e.message || e}`);
+    }
+    clearTimeout(timeout);
+    return resizedDetections;
+}
+
+function bestFace(detections) { // Return the highest scoring face from dections array.
+    if (detections.length > 1) {
+        review = review.concat(); // copy
+        review.sort((a, b) => Math.sign(b.detection.score - a.detection.score)); // highest score first.
+    }
+    return detections[0];
+}
+var lastInstruction = '', gotNeutral = false, gotExpression = false, gotFail = false;
+async function webcamCapture(start) {
+    const resizedDetections = await findFaces(start);
+    const face = bestFace(resizedDetections), now = Date.now(), TIMEOUT_MS = 2000;
     var instruction = '';
-    if (resizedDetections.length) {
-        const review = resizedDetections.concat();
-        review.sort((a, b) => Math.sign(a.detection.score - b.detection.score));
-        const box = review[0].detection.box;
+    function expired(expires) {
+        return expires && (now > expires);
+    }
+    if (face) {
+        const box = face.detection.box;
         const margin = 10;
-        if ((box.height < displaySize.height / 2)) {
+        if (displaySize.height < displaySize.width
+            ? (box.height < displaySize.height / 2)
+            : (box.width < displaySize.width / 2)) {
             instruction = "Move closer, please";
         } else if (box.left < margin) {
             instruction = "Move left";
@@ -78,65 +107,88 @@ async function webcamCapture(start) {
         } else if (box.bottom > displaySize.height - margin) {
             instruction = "Move up";
         } else {
-            const expressions = review[0].expressions;
+            const expressions = face.expressions;
+            gotFail = false;
             if (['happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised'].some(x => expressions[x] > 0.05)) {
                 if (!gotExpression) {
-                    gotExpression= Date.now();
-                    console.log('gotExpression');
+                    gotExpression = now + TIMEOUT_MS;
                 }
             } else if (expressions.neutral > 0.9) {
                 if (!gotNeutral) {
-                    gotNeutral = Date.now();
-                    console.log('gotNeutral');
+                    gotNeutral = now + TIMEOUT_MS;
                 }
             }
         }
-    } else {
-        instruction = "Please move back a bit";
+    } else if (!gotFail) {
+        gotFail = now + TIMEOUT_MS;
+    }
+    if (expired(gotFail)) {
+        instruction = "Make sure there is enough light, and that you can see your face with a box in the center of the video";
     }
     if (instruction) {
-        gotNeutral = gotExpression = false;
-    } else if (!gotExpression && gotNeutral && ((Date.now() - gotNeutral) > 2000)) {
+        gotNeutral = gotExpression = gotFail = false;
+    } else if (!gotExpression && expired(gotNeutral)) {
         instruction = "Please smile, or make a face";
-    } else if (!gotNeutral && gotExpression && ((Date.now() - gotExpression) > 2000)) {
+    } else if (!gotNeutral && expired(gotExpression)) {
         instruction = "Please have a neutral expression";
-    } else {
-        console.log(gotNeutral && ((Date.now() - gotNeutral)), gotExpression && ((Date.now() - gotExpression)));
     }
-    log(instruction);
 
     if (instruction && (instruction != lastInstruction) && !speechSynthesis.pending && !speechSynthesis.speaking) {
-        var utterThis = new SpeechSynthesisUtterance(instruction);
-        speechSynthesis.speak(utterThis);
-        lastInstruction = instruction;
+        speak(instruction);
     }
+    lastInstruction = instruction;
     if (gotExpression && gotNeutral) {
-        music.pause();
-        webcamVideo.srcObject.getTracks().forEach(track => track.stop());
-        webcamVideo.srcObject = null;
-        webcamVideo.parentElement.style.display = "none";
-        speechSynthesis.speak(new SpeechSynthesisUtterance("Thank you. Proof of unique human is complete"));
-    } else {
-        setTimeout(_ => webcamCapture(Date.now()), 1000 - (Date.now() - start));
+        webcamStop();
+    } else { // Throttled repeat
+        const INTENDED_MAX_INTERVAL_MS = 1000, MIN_MS = 100, elapsed = now - start;
+        console.log(elapsed, instruction, gotExpression, gotNeutral, gotFail);
+        setTimeout(_ => webcamCapture(now), Math.max(MIN_MS, INTENDED_MAX_INTERVAL_MS - elapsed));
     }
 }
+const loadStart = Date.now();
+const modelsTimeout = setTimeout(_ => alert("Unable to load AI models."), 5000);
+const models = Promise.all([
+    //faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
+    faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+    faceapi.nets.faceExpressionNet.loadFromUri('/models')
+]).then(_ => {
+    clearTimeout(modelsTimeout);
+    console.log('model load:', Date.now() - loadStart);
+});
+
+// iOS can't handle playing music and processing video. It freezes.
+var playMusic = !navigator.userAgent.includes('iPhone') && !navigator.userAgent.includes('iPad');
+if (playMusic) music.src = "game-start.mp3";
+
 async function webcamSetup(start) {
     log('starting setup');
-    startButton.style.display = "none";
-    music.loop = true;
-    music.play();
+    document.querySelector('.instructions').style.display = "none";
+    if (playMusic) {
+        music.loop = true;
+        music.play();
+    }
+    speak("Let's go.");
+    const loadFail = setTimeout(_ => alert('We were not able to access your webcam!'), 7000);
     await Promise.all([
         navigator.mediaDevices.getUserMedia({video: true})
             .then(stream => new Promise(resolve => {
                 webcamVideo.srcObject = stream;
-                setTimeout(_ => resolve(stream), 1000);
-            })),
-        //faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
-
-        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-        faceapi.nets.faceExpressionNet.loadFromUri('/models')
+                webcamVideo.onloadedmetadata = _ => resolve(stream);
+            }))
+            .catch(e => alert('Unable to access to Webcam!')),
+        models
     ]);
-    log('model', Date.now() - start);
-    webcamCapture(Date.now());
+    clearTimeout(loadFail);
+    displaySize = { width: webcamVideo.offsetWidth, height: webcamVideo.offsetHeight };
+    const now = Date.now();
+    console.log('setup', now - start);
+    webcamCapture(now);
+}
+function webcamStop() {
+    if (playMusic) music.pause();
+    webcamVideo.srcObject.getTracks().forEach(track => track.stop());
+    webcamVideo.srcObject = null;
+    webcamVideo.parentElement.style.display = "none";
+    speak("Thank you. Proof of unique human is complete");
 }
 startButton.onclick = _ => webcamSetup(Date.now());
