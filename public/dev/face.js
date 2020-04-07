@@ -56,6 +56,7 @@ function speak(text) {
         alert(`Error while telling you "${text}": ${event.error}`);
     }
     utterThis.onerror = onError;
+    utterThis.volume = 1;
     speechSynthesis.speak(utterThis);
 }
 
@@ -157,6 +158,7 @@ async function webcamSetup(start) {
     startButton.style.display = "none";
     music.loop = true;
     music.play();
+    speak("Thank you.");
     const loadFail = setTimeout(_ => alert(webcamVideo.srcObject
                                            ? 'Unable to load AI models.'
                                            : 'We were not able to access your webcam!'),
