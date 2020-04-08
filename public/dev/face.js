@@ -60,6 +60,13 @@ function speak(text) {
     speechSynthesis.speak(utterThis);
 }
 
+function bestFace(detections) { // Return the highest scoring face from dections array.
+    if (detections.length > 1) {
+        review = review.concat(); // copy
+        review.sort((a, b) => Math.sign(b.detection.score - a.detection.score)); // highest score first.
+    }
+    return detections[0];
+}
 var displaySize;
 async function findFaces(start) {
     var groupResult, resizedDetections, timeout = setTimeout(_ => alert('Timeout waiting for faces to be computed!'), 5000);
@@ -73,20 +80,14 @@ async function findFaces(start) {
         alert(`Error in computing faces: ${e.message || e}`);
     }
     clearTimeout(timeout);
-    return resizedDetections;
+    return [bestFace(resizedDetections), groupResult];
 }
 
-function bestFace(detections) { // Return the highest scoring face from dections array.
-    if (detections.length > 1) {
-        review = review.concat(); // copy
-        review.sort((a, b) => Math.sign(b.detection.score - a.detection.score)); // highest score first.
-    }
-    return detections[0];
-}
 var lastInstruction = '', gotNeutral = false, gotExpression = false, gotFail = false;
+var captured;
 async function webcamCapture(start) {
-    const resizedDetections = await findFaces(start);
-    const face = bestFace(resizedDetections), now = Date.now(), TIMEOUT_MS = 2000;
+    const [face, raw] = await findFaces(start);
+    const now = Date.now(), TIMEOUT_MS = 2000;
     var instruction = '';
     function expired(expires) {
         return expires && (now > expires);
@@ -117,6 +118,22 @@ async function webcamCapture(start) {
                 if (!gotNeutral) {
                     gotNeutral = now + TIMEOUT_MS;
                 }
+                if (!captured) {
+                    const bigBox = bestFace(raw).detection.box;
+                    captured = document.createElement("canvas");
+                    captured.width = bigBox.width;
+                    captured.height = bigBox.height;
+                    captured.getContext('2d').drawImage(webcamVideo,
+                                                        bigBox.left, bigBox.top, captured.width, captured.height,
+                                                        0, 0, captured.width, captured.height);
+                    /*
+                    var snap = document.createElement("canvas");
+                    snap.width = webcamVideo.videoWidth;
+                    snap.height = webcamVideo.videoHeight;
+                    snap.getContext('2d').drawImage(webcamVideo, 0, 0, snap.width, snap.height);
+                    snap.getContext('2d').drawImage(videoOverlay, 0, 0, snap.width, snap.height);
+                    statusBlock.appendChild(snap);*/
+                }
             }
         }
     } else if (!gotFail) {
@@ -125,8 +142,9 @@ async function webcamCapture(start) {
     if (expired(gotFail)) {
         instruction = "Make sure there is enough light, and that you can see your face with a box in the center of the video";
     }
-    if (instruction) {
-        gotNeutral = gotExpression = gotFail = false;
+    if (instruction || gotFail) {
+        captured = gotNeutral = gotExpression = false;
+        if (instruction) gotFail = false;
     } else if (!gotExpression && expired(gotNeutral)) {
         instruction = "Please smile, or make a face";
     } else if (!gotNeutral && expired(gotExpression)) {
@@ -184,11 +202,30 @@ async function webcamSetup(start) {
     console.log('setup', now - start);
     webcamCapture(now);
 }
-function webcamStop() {
+async function webcamStop() {
     if (playMusic) music.pause();
     webcamVideo.srcObject.getTracks().forEach(track => track.stop());
     webcamVideo.srcObject = null;
     webcamVideo.parentElement.style.display = "none";
     speak("Thank you. Proof of unique human is complete");
+    const snap = captured.toDataURL();
+    await Promise.all([
+        faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
+        faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+        faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+        faceapi.nets.ageGenderNet.loadFromUri('/models')
+    ]);
+    const final = await faceapi.detectSingleFace(captured).withFaceLandmarks().withFaceDescriptor().withAgeAndGender(),
+          finals = [final];
+    faceapi.draw.drawDetections(captured, finals);
+    faceapi.draw.drawFaceLandmarks(captured, finals);
+    statusBlock.appendChild(captured);
+    const demo = document.createElement('p');
+    demo.innerText = final.gender + ' age ' + final.age.toFixed();
+    statusBlock.appendChild(demo);
+    // var img = document.createElement("img");
+    // img.src = snap
+    // statusBlock.appendChild(img);
+    // console.log(img.src, final);
 }
 startButton.onclick = _ => webcamSetup(Date.now());
