@@ -26,7 +26,7 @@ function rawBodySaver(req, res, buf, encoding) {
     req.rawBody = buf.toString(encoding || 'utf8');
   }
 }
-app.use(bodyParser.json({verify: rawBodySaver}));
+app.use(bodyParser.json({verify: rawBodySaver, limit: '50mb'}));
 app.use(bodyParser.urlencoded({extended: true}));
 
 const CREDITS_PER_MS = 1.667;
@@ -135,6 +135,49 @@ app.post('/message', function (req, res) {
     }
     res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
     res.end(JSON.stringify({id: messageId}));
+});
+
+const FACE_CUTOFF = 0.5;
+function descriptorDistance(a, b) {
+    var sum = 0;
+    for (let i = 0; i < 128; i++) {
+        let difference = a[i] - b[i];
+        sum += difference * difference;
+    }
+    return Math.sqrt(sum);
+}
+app.post('/submitFace', function (req, res) {
+    const category = 'faceTest0';
+    function check(error) {
+        if (!error) return;
+        res.status(500).send(error.message);
+        return true;
+    }
+    function compare(faces) {
+        const matches = [];
+        // Compute distance for each face
+        faces.forEach(({descriptor, image}) => {
+            matches.push({
+                distance: descriptorDistance(req.body.descriptor, descriptor),
+                image
+            });
+        });
+        // Sort and find where to cut off.
+        matches.sort((a, b) => Math.sign(a.distance - b.distance)); // lowest score first.
+        var index = matches.findIndex(m => m.distance > 0.5);
+        if (index < 0) index = matches.length;
+        // Give answer.
+        const results = matches.slice(0, 1 + index);
+        res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
+        res.end(JSON.stringify(results));
+    }
+    redis.rpush(category, req.rawBody, function (error, data) {
+        if (check(error)) return;
+        redis.lrange(category, 0, -1, function (error, data) {
+            if (check(error)) return;
+            compare(data.map(JSON.parse));
+        });
+    });
 });
 
 var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.

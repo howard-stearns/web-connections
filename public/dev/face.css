@@ -27,3 +27,16 @@ video {
         height: auto;
     }
 }
+
+.result {
+    position: relative;
+}
+.result span {
+    color: yellow;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+}
+.result span::before {
+    content: "distance: ";
+}
