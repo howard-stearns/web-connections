@@ -68,7 +68,18 @@ function uuidv4(label) { // Not crypto strong, but good enough for prototype.
 // localStorage is NOT shared between different browsers on the same machine,
 // but it is shared between tabs of the same browser.
 var ID_KEY = 'guid';
-var guid = (window.localStorage && localStorage.getItem(ID_KEY)) || uuidv4();
+var guid = window.localStorage && localStorage.getItem(ID_KEY);
+if (!guid) {
+    guid = uuidv4();
+    if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persist().then(function (persistent) {
+            if (persistent)
+                console.log("Storage will not be cleared except by explicit user action");
+            else
+                console.log("Storage may be cleared by the UA under storage pressure.");
+        });
+    }
+}
 setCredits();
 
 // Reporting:
