@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Web Connections Test</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css">
+    <link href="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <script src="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.js"></script>
+    <link rel="stylesheet" href="account.css">
+  </head>
+  <body id="body" class="mdc-typography">
+
+    <!-- TOP APP BAR -->
+    <header id="topbar" class="mdc-top-app-bar mdc-top-app-bar--fixed">
+      <div class="mdc-top-app-bar__row">
+        <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start">
+          <button id="navigationButton" class="material-icons mdc-top-app-bar__navigation-icon mdc-icon-button">menu</button>
+          <span class="mdc-top-app-bar__title">Big World</span>
+        </section>
+        
+        <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-end mdc-menu-surface--anchor" role="toolbar">
+          <div id="energyBar" role="progressbar" class="mdc-linear-progress">
+            <div class="mdc-linear-progress__buffering-dots"></div>
+            <div class="mdc-linear-progress__buffer"></div>
+            <div class="mdc-linear-progress__bar mdc-linear-progress__primary-bar">
+              <span class="mdc-linear-progress__bar-inner"></span>
+            </div>
+            <div class="mdc-linear-progress__bar mdc-linear-progress__secondary-bar">
+              <span class="mdc-linear-progress__bar-inner"></span>
+            </div>
+          </div>
+          
+          <button id="profile"
+                  class="mdc-icon-button mdc-top-app-bar__action-item mdc-icon-button--on"
+                  aria-label="Change account info"
+                  aria-pressed="true">
+            <img id="profile__image" class="mdc-icon-button__icon mdc-icon-button__icon--on"/>
+          </button>
+
+          <!-- PROFILE MENU -->
+          <div id="profilemenu" class="mdc-menu mdc-menu-surface">
+            <nav class="mdc-list mdc-list--avatar-list" role="menu" aria-hidden="true" aria-orientation="vertical">
+
+              <a href="#registration" class="mdc-list-item" role="menuitem">
+                <img id="profilemenu__image" class="mdc-list-item__graphic" aria-hidden="true"/>
+                <!-- FIXME REMOVE <span class="mdc-list-item__text">Change picture</span> -->
+                <span class="mdc-list-item__text">
+                  <span class="mdc-list-item__primary-text">Change info</span>
+                  <span id="profilemenu__name" class="mdc-list-item__secondary-text"></span>
+                </span>
+              </a>
+              <a href="#energy" class="mdc-list-item" role="menuitem">
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">battery_charging_full</i>
+                <span class="mdc-list-item__text">Energy</span>
+              </a>
+              <hr class="mdc-list-divider">
+              <a id="switchUsers" href="#switchUsers" class="mdc-list-item mdc-list-item--disabled" role="menuitem">
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">swap_calls</i>
+                <span class="mdc-list-item__text">Switch users</span>
+              </a>
+              <a href="#registration" class="mdc-list-item" role="menuitem">
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">person_add</i>
+                <span class="mdc-list-item__text">Register</span>
+              </a>
+            </nav>
+          </div>
+        </section>
+      </div>
+    </header>
+    <!-- APP DRAWER -->
+    <aside id="appdrawer" class="mdc-drawer mdc-drawer--modal">
+      <div class="mdc-drawer__content">        
+        <nav class="mdc-list">
+          <a class="mdc-list-item" href="#notImplementedDependent" aria-current="page" tabindex="0">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">system_update</i>
+            <span class="mdc-list-item__text">Add to home screen</span>
+          </a>
+          <a class="mdc-list-item" href="#notImplementedDependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">center_focus_weak</i>
+            <span class="mdc-list-item__text">Share by QR code</span>
+          </a>
+          <a class="mdc-list-item" href="#notImplementedIndependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">explore</i>
+            <span class="mdc-list-item__text">Something app-specific</span>
+          </a>
+          <a class="mdc-list-item" href="#notImplementedIndependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">wc</i>
+            <span class="mdc-list-item__text">Another app thing</span>
+          </a>
+          <a class="mdc-list-item" href="#notImplementedIndependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">local_bar</i>
+            <span class="mdc-list-item__text">Etcetera</span>
+          </a>
+          <hr class="mdc-list-divider">
+          <a class="mdc-list-item" href="#notImplementedIndependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">info_outline</i>
+            <span class="mdc-list-item__text">About Big World</span>
+          </a>
+          <a class="mdc-list-item" href="#notImplementedDependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">contact_support</i>
+            <span class="mdc-list-item__text">Contact support</span>
+          </a>
+          <a class="mdc-list-item" href="#notImplementedIndependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">verified_user</i> <!-- or icon: policy -->
+            <span class="mdc-list-item__text">Terms of service</span>
+          </a>
+          <a class="mdc-list-item" href="#notImplementedIndependent">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">vpn_lock</i>
+            <span class="mdc-list-item__text">Privacy policy</span>
+          </a>
+        </nav>
+      </div>
+    </aside>
+    <div class="mdc-drawer-scrim"></div>
+    <!-- CONTENT -->
+    <div class="mdc-top-app-bar--fixed-adjust">
+      <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
+        <ul class="notImplemented">
+          <li>FIXME: incorrect display in pre-filled input controls</li>          
+          <li>FIXME: increase energy when you buy some</li>
+          <li>FIXME: switch users, with authorization</li>
+          <li>FIXME: logout</li>          
+          <li>FIXME: authorization on settings and buying, and timeout</li>
+          <li>FIXME: server registration, with camera processing as in prototype</li>
+        </ul>
+      </p>
+      <p>This demo is a real implementation of accounts, except:
+        <ul class="notImplemented">
+          <li>no underlying keys yet</li>
+          <li>energy consumption isn't enforced at server (needs keys)</li>
+          <li>on heroku</li>
+          <li>UI is not themed</li>
+          <li>energy consumption display is random, and energy level is steady decline over five minutes (not related to concumption). It does not increase when you "buy" more. (How will we show amounts more than 100%?)</li>
+          <li>not connected to email</li>
+          <li>not connected to credit card service</li>
+          <li>not connected to any notifications (interacts with add-to-home-screen)</li>
+          <li>no language/localization choices</li>
+          <li>all the stuff that says "not implemented" when you click it, most of which has some interaction with identity and login</li>
+          <li>small scale only (face check)</li>
+          <li>no passwordless hardware login (keyfob or touchid)</li>
+        </ul>
+      </p>
+      <p>The purpose is to have real working code to evaluate the underlying technical requirements, as opposed to proposing a specific UX. But clearly these interact, and so it has to start somewhere. (I also hadn't used a lot of Material Design yet, and so I needed to familiarize myself with what was available and how it worked.) As is, the major features are:
+        <ul class="implemented">
+          <li>Does not require login to start.</li>
+          <li>Keeps track of login (but confirms when needed).</li>
+          <li>Allows multiple users to share a machine (e.g., on desktop).</li>
+          <li>Always clear who you are (including anonymous), and groups account-related stuff together.</li>
+          <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
+          <li>It doesn't ask for a credit card until you try to buy something, even during registration.</li>
+        </ul>
+      </p>
+      <ol>
+        <li>Try changing display name or spending money before registering</li>
+        <li>Register, either from the above or directly.</li>
+        <li>Try updating info (and also try leaving the update dialog alone for 20 seconds, and try again).</li>
+        <li>Try logout, and updating info with or without logout.</li> 
+        <li>Try multiple accounts per machine, switching accounts, and updating info from the right or wrong account. This uses a standard API that is implemented with different UIs in different browsers (and of which we do not have control). E.g., on Chrome, look at settings=>autofill=>passwords. So...</li>
+        <li>Try multiple machines, or at least multiple browsers.</li>
+        <li>Try making a (legit or bogus) registration on another machine (or browser).</li>
+        <li>Try transfering money (and try leaving that dialog alone for 20 seconds).</li>
+        <li>Try browser refresh and back/forward in various cases. There are some very subtle cases when the browser has multiple accounts stored.</li>
+      </ol>
+
+    </div>
+
+    <!-- Dialogs  -->
+    <div id="notImplementedIndependent" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="not-implement-title"
+             aria-describedby="not-implemented-content">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title" id="not-implement-title">Not Implemented</h2>
+          <div class="mdc-dialog__content" id="not-implemented-content">
+            The implementation is not likely to interact much with accounts and registration.
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">OK</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+    <div id="notImplementedDependent" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="not-implement-title"
+             aria-describedby="not-implemented-content">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title" id="not-implement-title">Not Implemented</h2>
+          <div class="mdc-dialog__content" id="not-implemented-content">
+            The implementation may interact with mechanisms shown here. We'll want to think this through sooner rather than later.
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">OK</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+
+    <div id="credits" class="mdc-dialog">
+      <form id="buyEnergy" class="onlyRegistered mdc-dialog__container">
+        
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="credits-title"
+             aria-describedby="credits-content">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title" id="credits-title">Energy</h2>
+          <div class="mdc-dialog__content" id="credits-content">
+            <p>The louder you speak, or the faster you move, the more energy you consume. When you run out, you cannot speak or move.</p>
+            <p>Your energy level is shown by the solid white bar at top of the page. For example, your current level is <span id="energyAmount"></span>%.</p>
+            <p>Your rate of energy consumption is shown by the moving green bar.</p>
+            <p>Registered users have their energy replenished automatically. Registered users can also earn extra energy for free by contributing their <a href="https://web-connections.herokuapp.com/credits.html">idle computers</a>, or simply buy extra energy with a credit card.</p>
+            <p class="onlyUnregistered">To get more energy, you must register (for free).</p>
+
+              <div class="form-group mdc-elevation--z20">
+                <ul id="buyEnergy__list" class="mdc-list mdc-list--non-interactive list--floating-height">
+                  <li class="mdc-list-item">
+                    <div class="mdc-typography mdc-typography--body2">
+                      Energy credits can be purchased for 100 units per $1.00. <i>FIXME: How should we display a balance more than 100% on the energy bar?</i>
+                    </div>
+                  </li>
+                  
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="selectedCard__label" class="mdc-text-field mdc-text-field--outlined" for="selectedCard">
+                        <input id="selectedCard" type="text" class="mdc-text-field__input" aria-labelledby="selectedCard__floatingLabel" required>
+                        <div id="selectedCard__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="selectedCard__floatingLabel" class="mdc-floating-label">Selected Card</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                    </div>
+                  </li>
+
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="purchaseAmount__label" class="mdc-text-field mdc-text-field--outlined" for="purchaseAmount">
+                        <input id="puchaseAmount" type="number" class="mdc-text-field__input" aria-labelledby="purchaseAmount__floatingLabel" autocomplete="off" required min="1" step="1" max="100">
+                        <div id="purchaseAmount__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="purchaseAmount__floatingLabel" class="mdc-floating-label">Purchase Amount</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+          
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="cancel">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">cancel</span>
+            </button>
+            <input type="submit" class="mdc-button mdc-dialog__button">
+          </footer>
+        </div>
+      </form>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+
+    <!-- REGISTRATION -->
+    <div id="registration" class="mdc-dialog">
+      <form id="registrationForm" class="mdc-dialog__container">
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="registration-title"
+             aria-describedby="registration-content">
+            
+            <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+            <h2 class="mdc-dialog__title" id="registration-title">Registration</h2>
+            <div class="mdc-dialog__content" id="registration-content">
+              <div class="onlyUnregistered">
+                <p>Registration is free.</p>
+                <p>Only registered users can change their display name, or get more <a href="#energy">energy</a>.</p>
+              </div>
+              <div class="onlyRegistered">
+                You can change any of these current settings.
+              </div>
+
+              <div class="form-group mdc-elevation--z20">
+                <ul id="loginPublic__list" class="mdc-list mdc-list--non-interactive list--floating-height">
+                  <li class="mdc-list-item">
+                    <div class="mdc-typography mdc-typography--body2">
+                      Public - visible to others
+                    </div>
+                  </li>
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="displayName__label" class="mdc-text-field mdc-text-field--outlined" for="displayName">
+                        <input id="displayName" type="text" class="mdc-text-field__input" aria-labelledby="displayName__floatingLabel" autocomplete="nickname given-name name" required tabindex="0">
+                        <div id="displayName__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="displayName__floatingLabel" class="mdc-floating-label">Display name</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                    </div>
+                  </li>
+                  
+                </ul>
+              </div>
+
+              <div class="form-group mdc-elevation--z20">
+                <ul id="loginPrivate__list" class="mdc-list mdc-list--non-interactive list--floating-height">
+                  <li class="mdc-list-item">
+                    <div class="mdc-typography mdc-typography--body2">
+                      Private - not shared with anyone
+                    </div>
+                  </li>
+                  
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="email__label" class="mdc-text-field mdc-text-field--outlined" for="email">
+                        <input id="email" type="email" class="mdc-text-field__input" aria-labelledby="email__floatingLabel" autocomplete="email" required>
+                        <div id="email__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="email__floatingLabel" class="mdc-floating-label">Email</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                    </div>
+                  </li>
+
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="password__label" class="mdc-text-field mdc-text-field--outlined mdc-text-field--with-trailing-icon" for="password">
+                        <input id="password" type="password" class="mdc-text-field__input" aria-labelledby="password__floatingLabel" autocomplete="new-password" required>
+                        <button id="passwordVisibility" class="mdc-icon-button material-icons mdc-text-field__icon mdc-text-field__icon--trailing">visibility</button>
+                        <div id="password__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="password__floatingLabel" class="mdc-floating-label">Password</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                    </div>
+                  </li>
+
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="face__label" class="mdc-text-field mdc-text-field--outlined mdc-text-field--with-trailing-icon" for="face">
+                        <input id="face" type="text" class="mdc-text-field__input" aria-labelledby="face__floatingLabel" required autocomplete="off">
+                        <img id="face__image" class="mdc-list-item__graphic hidden"/>
+                        <button id="faceCamera" class="mdc-icon-button material-icons mdc-text-field__icon mdc-text-field__icon--trailing">photo_camera</button>
+                        <div id="face__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="face__floatingLabel" class="mdc-floating-label">Security selfie</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                    </div>
+                  </li>
+                  
+                </ul>
+              </div>
+              
+            </div>
+            <footer class="mdc-dialog__actions">
+              <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="cancel">
+                <div class="mdc-button__ripple"></div>
+                <span class="mdc-button__label">cancel</span>
+              </button>
+              <input type="submit" class="mdc-button mdc-dialog__button">
+            </footer>
+        </div>
+      </form>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+    
+    <script src="account.js"></script>
+  </body>
+</html>

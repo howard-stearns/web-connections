@@ -1,0 +1,60 @@
+#purposes {
+    text-align: center;
+}
+
+#face__image,
+#topbar #profile img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+#face__image {
+    z-index: 10;
+}
+.hidden {
+    display: none;
+}
+.transparent {
+    color: transparent !important;
+}
+
+.list--floating-height .mdc-list-item {
+    /* Normal .mdc-list-item has fixed height, which doesn't have room for notched outline */
+    height: auto;  
+}
+
+.list-item__text-field-container {
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.form-group {
+    border-radius: 8px;
+    margin: 5px;
+}
+
+#notImplementedDependent .mdc-dialog__content,
+.notImplemented li {
+    color: var(--mdc-theme-error);
+}
+#notImplementedIndependent .mdc-dialog__content,
+.implemented li {
+    color: var(--mdc-theme-secondary);
+}
+
+.mdc-linear-progress__bar-inner {
+    border-color: var(--mdc-theme-secondary);
+}
+
+body.registered .onlyUnregistered {
+    display: none;
+}
+body:not(.registered) .onlyRegistered {
+    color: red;
+}
