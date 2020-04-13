@@ -7,6 +7,7 @@ const MDCDrawer = mdc.drawer.MDCDrawer;
 const MDCDialog = mdc.dialog.MDCDialog;
 const MDCMenu = mdc.menu.MDCMenu;
 const MDCList = mdc.list.MDCList;
+const MDCSelect = mdc.select.MDCSelect;
 const MDCTextField = mdc.textField.MDCTextField;
 const MDCTextFieldIcon = mdc.textField.MDCTextFieldIcon;
 const MDCTextFieldHelperText = mdc.textField.MDCTextFieldHelperText;
@@ -21,7 +22,7 @@ var isRegistered = false;
 function ensureUnregisteredLogin() {
     // FIXME: do we have what we need in cookies? Do we need to contact the server again?
     return Promise.resolve({
-        iconURL: "images/anonymous.png",
+        iconURL: "images/anonymous.jpg",
         name: "Teal-raptor-1234" // FIXME
     });
 }
@@ -233,6 +234,7 @@ function gotoHash() {
         setTimeout(_ => registrationDialog.open(), 100);
         break;
     case '#energy':
+        registrationDialog.close();        
         energyAmount.innerText = Math.round(currentEnergy * 100).toFixed();
         setTimeout(_ => creditsDialog.open(), 100);
         break;
