@@ -34,6 +34,10 @@
     padding-bottom: 10px;
 }
 
+.mdc-list-item--disabled .mdc-list-item__graphic {
+    opacity: 0.5;
+}
+
 .form-group {
     border-radius: 8px;
     margin: 5px;
@@ -56,5 +60,5 @@ body.registered .onlyUnregistered {
     display: none;
 }
 body:not(.registered) .onlyRegistered {
-    color: red;
+    display: none;
 }

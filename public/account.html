@@ -46,7 +46,6 @@
 
               <a href="#registration" class="mdc-list-item" role="menuitem">
                 <img id="profilemenu__image" class="mdc-list-item__graphic" aria-hidden="true"/>
-                <!-- FIXME REMOVE <span class="mdc-list-item__text">Change picture</span> -->
                 <span class="mdc-list-item__text">
                   <span class="mdc-list-item__primary-text">Change info</span>
                   <span id="profilemenu__name" class="mdc-list-item__secondary-text"></span>
@@ -57,13 +56,17 @@
                 <span class="mdc-list-item__text">Energy</span>
               </a>
               <hr class="mdc-list-divider">
+              <a href="#registration" class="mdc-list-item" role="menuitem">
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">person_add</i>
+                <span class="mdc-list-item__text">Register</span>
+              </a>
               <a id="switchUsers" href="#switchUsers" class="mdc-list-item mdc-list-item--disabled" role="menuitem">
                 <i class="material-icons mdc-list-item__graphic" aria-hidden="true">swap_calls</i>
                 <span class="mdc-list-item__text">Switch users</span>
               </a>
-              <a href="#registration" class="mdc-list-item" role="menuitem">
-                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">person_add</i>
-                <span class="mdc-list-item__text">Register</span>
+              <a href="#logout" class="mdc-list-item mdc-list-item--disabled" role="menuitem">
+                <img class="mdc-list-item__graphic" aria-hidden="true" src="images/anonymous.jpg"/>
+                <span class="mdc-list-item__text">Sign out</span>
               </a>
             </nav>
           </div>
@@ -214,7 +217,7 @@
     </div>
 
     <div id="credits" class="mdc-dialog">
-      <form id="buyEnergy" class="onlyRegistered mdc-dialog__container">
+      <form id="buyEnergy" class="FIXMEonlyRegistered mdc-dialog__container">
         
         <div class="mdc-dialog__surface"
              role="alertdialog"
