@@ -17,12 +17,6 @@
 #face__image {
     z-index: 10;
 }
-.hidden {
-    display: none;
-}
-.transparent {
-    color: transparent !important;
-}
 
 .list--floating-height .mdc-list-item {
     /* Normal .mdc-list-item has fixed height, which doesn't have room for notched outline */
@@ -55,10 +49,15 @@
 .mdc-linear-progress__bar-inner {
     border-color: var(--mdc-theme-secondary);
 }
-
 body.registered .onlyUnregistered {
     display: none;
 }
 body:not(.registered) .onlyRegistered {
     display: none;
+}
+.hidden {
+    display: none !important;
+}
+.transparent {
+    color: transparent !important;
 }

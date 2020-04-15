@@ -37,7 +37,7 @@
                   class="mdc-icon-button mdc-top-app-bar__action-item mdc-icon-button--on"
                   aria-label="Change account info"
                   aria-pressed="true">
-            <img id="profile__image" class="mdc-icon-button__icon mdc-icon-button__icon--on"/>
+            <img id="profile__image" class="mdc-icon-button__icon mdc-icon-button__icon--on" src="images/anonymous.jpg"/>
           </button>
 
           <!-- PROFILE MENU -->
@@ -56,16 +56,19 @@
                 <span class="mdc-list-item__text">Energy</span>
               </a>
               <hr class="mdc-list-divider">
-              <a href="#registration" class="mdc-list-item" role="menuitem">
-                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">person_add</i>
-                <span class="mdc-list-item__text">Register</span>
+              <a href="#registration" id="registerItem" class="mdc-list-item" role="menuitem">
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">add_to_queue</i>
+                <span class="mdc-list-item__text">
+                  <span class="mdc-list-item__primary-text">Register User</span>
+                  <span class="mdc-list-item__secondary-text">for this device</span>
+                </span>
               </a>
-              <a id="switchUsers" href="#switchUsers" class="mdc-list-item mdc-list-item--disabled" role="menuitem">
-                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">swap_calls</i>
-                <span class="mdc-list-item__text">Switch users</span>
+              <a href="#login" id="loginItem" class="mdc-list-item mdc-list-item--disabled" role="menuitem">
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">check_box</i>
+                <span class="mdc-list-item__text">Sign in</span>
               </a>
-              <a href="#logout" class="mdc-list-item mdc-list-item--disabled" role="menuitem">
-                <img class="mdc-list-item__graphic" aria-hidden="true" src="images/anonymous.jpg"/>
+              <a href="#logout" id="logoutItem" class="mdc-list-item mdc-list-item--disabled" role="menuitem">
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">check_box_outline_blank</i>
                 <span class="mdc-list-item__text">Sign out</span>
               </a>
             </nav>
@@ -78,7 +81,7 @@
       <div class="mdc-drawer__content">        
         <nav class="mdc-list">
           <a class="mdc-list-item" href="#notImplementedDependent" aria-current="page" tabindex="0">
-            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">system_update</i>
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">add_to_home_screen</i> <!-- system_update -->
             <span class="mdc-list-item__text">Add to home screen</span>
           </a>
           <a class="mdc-list-item" href="#notImplementedDependent">
@@ -122,27 +125,29 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: incorrect display in pre-filled input controls</li>          
-          <li>FIXME: increase energy when you buy some</li>
-          <li>FIXME: switch users, with authorization</li>
-          <li>FIXME: logout</li>          
-          <li>FIXME: authorization on settings and buying, and timeout</li>
-          <li>FIXME: server registration, with camera processing as in prototype</li>
+          <li>FIXME: server login and update</li>
+          <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
+          <li>FIXME: adjust volume</li>
+          <li>FIXME: camera processing as in prototype</li>
+          <li>FIXME: password-saving version, with query option to see the other way</li>
+          <li>FIXME: sample "avatars", to id, give credits, give find-me, must for all(?)</li>
         </ul>
       </p>
-      <p>This demo is a real implementation of accounts, except:
+      <p>This demo is a real implementation of accounts, <i>except</i>:
         <ul class="notImplemented">
-          <li>no underlying keys yet</li>
-          <li>energy consumption isn't enforced at server (needs keys)</li>
-          <li>on heroku</li>
-          <li>UI is not themed</li>
-          <li>energy consumption display is random, and energy level is steady decline over five minutes (not related to concumption). It does not increase when you "buy" more. (How will we show amounts more than 100%?)</li>
-          <li>not connected to email</li>
-          <li>not connected to credit card service</li>
-          <li>not connected to any notifications (interacts with add-to-home-screen)</li>
-          <li>no language/localization choices</li>
+          <li>internal db (indexDb instead of localStorage)
+          <li>internal keys</li>
+          <li>enforce energy consumption (needs keys). The demo is consuming randomly.</li>
+          <li>UI theme</li>
+          <li>unit tests</li>
+          <li>email service</li>
+          <li>credit card service</li>
+          <li>nofication (with service?) (interacts with add-to-home-screen)</li>
+          <li>right to be forgotten</li>
+          <li>language/localization</li>
           <li>all the stuff that says "not implemented" when you click it, most of which has some interaction with identity and login</li>
-          <li>small scale only (face check)</li>
+          <li>move to highfidelity.co? aws?</li>
+          <li>scale up energy and face check</li>
           <li>no passwordless hardware login (keyfob or touchid)</li>
         </ul>
       </p>
@@ -158,8 +163,8 @@
       </p>
       <ol>
         <li>Try changing display name or spending money before registering</li>
-        <li>Register, either from the above or directly.</li>
-        <li>Try updating info (and also try leaving the update dialog alone for 20 seconds, and try again).</li>
+        <li>Register, either from the above or from (user) => Register.</li>
+        <li>Try updating info after registering</li>
         <li>Try logout, and updating info with or without logout.</li> 
         <li>Try multiple accounts per machine, switching accounts, and updating info from the right or wrong account. This uses a standard API that is implemented with different UIs in different browsers (and of which we do not have control). E.g., on Chrome, look at settings=>autofill=>passwords. So...</li>
         <li>Try multiple machines, or at least multiple browsers.</li>
@@ -167,7 +172,17 @@
         <li>Try transfering money (and try leaving that dialog alone for 20 seconds).</li>
         <li>Try browser refresh and back/forward in various cases. There are some very subtle cases when the browser has multiple accounts stored.</li>
       </ol>
-
+      <p>Quick discussion of passwords:
+        <ol>
+          <li>There is a browser API, that everyone seems to support, for working with hardware keys. That is, instead of a password, a user can tap their separate Near-Field Communication keyfob device as authentication, or touch the fingerprint id on a MacBook touchpad. The model here is compatible with the use of this API, but I didn't bother to do so because:
+            <ol>
+              <li>No one has such devices. E.g., an iPhone doesn't count!</li>
+              <li>I'd like to implement it anyway, but it is a <i>lot</i> of fiddly code. So I figured I'd wait until everything else gets ironed out the way we want it to be.</li>
+            </ol>
+          <li>There is a browser API for working with "federated credentials" from third-party providers like Google or Facebook. The model here is compatible with the use of this API, but I didn't bother to do so, because I figured that if we're so serious about privacy that we don't want to segment users or track their user experience, we certainly don't want Facebook and Google doing so!</li>
+          <li>So, that leaves passwords. On the one hand, browsers fill this in for you so, it's not <i>too</i> burdensome. On the other hand, anyone with access to your computer can see all your passwords, including the password for us. If it's that accessible, it seems silly to make the users do a meaningless autofill. <b>Should I just store the password on the machine so that the user doesn't even have to click through?</b></li>
+        </ol>
+      </p>
     </div>
 
     <!-- Dialogs  -->
@@ -216,6 +231,58 @@
       <div class="mdc-dialog__scrim"></div>
     </div>
 
+    <div id="selectUser" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="selectUser-title"
+             aria-describedby="selectUser-content">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title" id="selectUser-title"><span id="selectUser__context">Sign in</span> as</h2>
+          <div class="mdc-dialog__content" id="not-implemented-content">
+            <template id="selectUserTemplate">
+              <li class="mdc-list-item">
+                <img class="mdc-list-item__graphic" aria-hidden="true" />
+                <span class="mdc-list-item__text">
+                  <span class="mdc-list-item__primary-text"></span>
+                  <span class="mdc-list-item__secondary-text"></span>
+                </span>
+              </li>
+              <li class="mdc-list-item">
+                <div class="list-item__text-field-container">
+                  <label id="selectPassword__label" class="mdc-text-field mdc-text-field--outlined mdc-text-field--with-trailing-icon" for="password">
+                    <input id="selectPassword" type="password" class="mdc-text-field__input" aria-labelledby="password__floatingLabel" autocomplete="current-password" required>
+                    <button id="selectPasswordVisibility" class="mdc-icon-button material-icons mdc-text-field__icon mdc-text-field__icon--trailing">visibility</button>
+                    <div id="selectPassword__outline" class="mdc-notched-outline">
+                      <div class="mdc-notched-outline__leading"></div>
+                      <div class="mdc-notched-outline__notch">
+                        <span id="selectPassword__floatingLabel" class="mdc-floating-label">Password</span>
+                      </div>
+                      <div class="mdc-notched-outline__trailing"></div>
+                    </div>
+                  </label>
+                </div>
+              </li>
+            </template>
+            <ul id="selectUser__list" class="mdc-list mdc-list--two-line mdc-list--avatar-list">
+            </ul>
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="cancel">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">cancel</span>
+            </button>
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">sign in</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+    
     <div id="credits" class="mdc-dialog">
       <form id="buyEnergy" class="FIXMEonlyRegistered mdc-dialog__container">
         
@@ -296,7 +363,7 @@
              aria-describedby="registration-content">
             
             <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
-            <h2 class="mdc-dialog__title" id="registration-title">Registration</h2>
+            <h2 class="mdc-dialog__title" id="registration-title"><span class="onlyRegistered">Update </span>Registration</h2>
             <div class="mdc-dialog__content" id="registration-content">
               <div class="onlyUnregistered">
                 <p>Registration is free.</p>
@@ -396,7 +463,8 @@
                 <div class="mdc-button__ripple"></div>
                 <span class="mdc-button__label">cancel</span>
               </button>
-              <input type="submit" class="mdc-button mdc-dialog__button">
+              <!-- value used as button name, which default on Firefox to "Submit Query" -->
+              <input type="submit" class="mdc-button mdc-dialog__button" id="register__submit" value="Register">
             </footer>
         </div>
       </form>
