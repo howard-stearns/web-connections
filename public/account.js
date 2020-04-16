@@ -72,12 +72,12 @@ function createOrUpdateRegistration(options) { // on server
     return service('/registration', options, options);
 }
 function handleSuccessfulLogin(keysAndSuch) {
-    console.log('login result', keysAndSuch);
+    //console.log('login result', keysAndSuch);
     if (!keysAndSuch) return Promise.resolve();
+    setInterval(updateEnergy, 200);
     return Promise.resolve(setupUser(keysAndSuch)); // FIXME: update keystore if needed
 }
 function storeCredentials(options) {
-    console.log('options:', options);
     // We don't get to ask navigator.credentials how many accounts there are, or what their names/icons are,
     // so store them ourselves as well.
     setDbSubkey(options.id, 'iconURL', options.iconURL);
@@ -105,7 +105,6 @@ function logIn() {
         mediation: "optional"
     })
         .then(credential => {
-            console.log('stored credentials are:', credential);
             if (!credential) return unregisteredLogin();
             if (credential.type === 'password')
                 return passwordLogin(credential).catch(e => {
@@ -121,16 +120,18 @@ function logIn() {
 
 async function confirmPasswordOfCurrentUser(id, e) {// Answers credential if successful, otherwise falsey
     if (e) console.error(e);
-    const credential = await gatherCredentialWithPassword([id], true, "Confirm", e && e.message);
-    console.log('gathered credential', credential);
+    const credential = await gatherCredentialWithPassword([id], {
+        forcePassword: true,
+        forceDialog: true,
+        label: "Confirm",
+        message: e && e.message
+    });
     if (!credential) return; // dismissed
     try {
         await passwordLogin(credential);
     } catch (e) {
-        console.log('got error', e);
         return confirmPasswordOfCurrentUser(id, e);
     }
-    console.log('confirm password answering', credential);
     return credential;
 }
 
@@ -145,10 +146,15 @@ function openDialog(dialogDomElement, onOpen=null) { // Answer a promise that re
         dialog.open();
     });
 }
+function goIf(from, to = '') { // set hash only if current as specified
+    if (location.hash === from) location.hash = to;
+}
 
+// Inititalizing MDC
 function mapSelectedElements(ancestor, selector, callback) {
     ancestor.querySelectorAll(selector).forEach(callback);
 }
+// MDC objects are instantiated and saved so that mdcObjects.get(domElement) => MDC object.
 const mdcObjects = new WeakMap();
 function instantiateDescendents(ancestor, selector, constructor) {
     mapSelectedElements(ancestor, selector, e => mdcObjects.set(e, new constructor(e)));
@@ -165,49 +171,54 @@ function instantiateAndLayoutLists(ancestor) {
         list.layout();
     });
 }
-/*
+/*  The Beast
 Given a list of one or more credential ids,
 present the user with the credentials, and
-require the user to enter the password for the selected credential.
+conditionally require the user to enter the password for the selected credential.
 Return the selected, completed credential, or falsey if the user cancels.
 
-Requires that getDb(id) produce {id, name, iconURL}.
+Requires that getDb(id) produce {id, name, iconURL, password (in some conditions)}.
 
 This is used in two circumstances:
 
 1. It implements the credentials.get UI for browsers that do not implement PasswordCredential.
    That is, pick from among multiple credentials, or at least be made aware of the one stored credential being used.
+   If the user has explicitly signed out, then afterwards they have to explicitly pick or cancel, until they pick one.
 
-   In browsers that implement PasswordCredential, the password may be stored with everything else, where
-   it can be be reviewed and deleted by anyone with OS admin access to the browser.
-   While we store the {id, name, iconURL} in local site storage (getDb), we don't want to be responsible 
-   for storing passwords in such "plain sight". So we provide a password input field for the user to do so.
-   IFF the user has previously saved the password with browser, AND forceConfirmation is not truthy,
-   then we do allow this field to be autocompleted by the browser. (Otherwise, the user will have to type it.)
-
-   Note that in cases where the password is autocompleted, the UI is nearly identical to that of the
-   Chrome implementation of PasswordCredential, except:
-    a. There is this extra password field that the user has to click in to autofill.
-    b. In the special (but common) case of a single id, Chrome merely tells the user of the use of 
-       that credential in a passing snackbar, rather than a modal dialog. We don't have that option because of (a).
-
-2. Regardless of whether the user experience the above on startup, or used a native PasswordCredential, we
+2. Regardless of whether the user experiences the above on startup vs using a native PasswordCredential, we
    force the user to enter their (old) password before changing their profile. For example, they may
    have walked away from the machine without logging out, or they might not have noticed the current signin
    despite the pictures and confirmation for case (1). So before changing their profile, we force the
-   user to enter their password, without autocomplete. This is the same UI as in the singlue user case (1),
+   user to enter their password, without autocomplete. This is the same UI as in the singlue user case of (1),
    because we want the user to be aware of the name, picture, and email that they are entering a password for.
+
+Now, here is where it gets tricky. I think the best user experience is where (1) is simply our own implementation 
+of what Chrome does fo PasswordCredential. That's what happens by default. However, to implement (1), we keep ALL of
+the information in our own on-device per-site persistent storage, including the password, and we don't (yet) provide
+a UI for a user to manage/delete saved data, the way that the Chrome browser does for saved password credentials.
+Note that even if we did provide that, it would be in our app, not in the browser's "settings". It turns out that 
+even in browsers that do not yet support the PasswordCredential API, they DO supply a similar separate password store.
+However, they require that the user click a password form field to fill in the password. Javascript cannot reach in 
+and grab the password (even for our own site) without the user clicking. So... there is an alternative implementation,
+in which STORE_PASSWORDS, below, is false, in which we do not store passwords ourselves, but instead present the user
+with the password field from (2), and let it autocomplete from the browser.
 */
 const STORE_PASSWORDS = !location.search.includes('store-passwords=false');
-async function gatherCredentialWithPassword(ids, forceConfirmation = false, label = "Sign in", message = '') {
-    console.log('gatherCredentialsWithPasswords', ids, forceConfirmation, label);
+async function gatherCredentialWithPassword(ids, {
+    forcePassword = false,
+    forceDialog = forcePassword,
+    //forceConfirmation = false,
+    label = "Sign in",
+    message = ''}) {
+    // FIXME: display message, if any (e.g., that the password entered was wrong)
+    console.log('gatherCredentialsWithPasswords', ids, forceDialog, forcePassword, label, message);
     function getIconElement(avatar) { return avatar.querySelector('img'); }
     function getNameElement(avatar) { return avatar.querySelector('.mdc-list-item__primary-text'); }
     function getIdElement(avatar) { return avatar.querySelector('.mdc-list-item__secondary-text'); }
-    const passwords = STORE_PASSWORDS && !forceConfirmation && []
+    const passwords = STORE_PASSWORDS && !forcePassword && []
     var credential = {};
-    if (!ids.length && !forceConfirmation) return;
-    if (passwords && (ids.length === 1)) {
+    if (!ids.length && !forceDialog) return;
+    if ((ids.length === 1) && !forceDialog) { // No need for dialog. Just a snackbar notification.
         const cred = getDb(ids[0]);
         cred.id = signingIn__secondary.innerHTML = ids[0];
         signingInSnackbar.open()
@@ -220,8 +231,12 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
               visibility = password.querySelector('button'),
               input = password.querySelector('input'),
               accept = selectUser.querySelector('button[data-mdc-dialog-action="yes"]');
-        console.log('passwords', passwords);
-        accept.querySelector('.mdc-button__label').innerText = label;
+        if (passwords && (ids.length > 1)) {
+            accept.classList.add('hidden');
+        } else {
+            accept.querySelector('.mdc-button__label').innerText = label;
+            accept.disabled = !passwords;
+        }
         function setCredential(index) {
             const selected = selectUser__list.children[index];
             credential = {
@@ -250,15 +265,8 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
             accept.disabled = !credential.id;
             credential.password = e.target.value;
         }
-        accept.disabled = !passwords;
-        if (forceConfirmation) {
-            // Hmmm. MDN says this is bad, and indeed browsers don't listen to this for password fields
-            // presumably because they want long passwords that no one can type. But then,
-            // how do you avoid letting everyone on the computer see your password???
-            input.setAttribute('autocomplete', 'off');
-        }
         const nCredentials = selectUser__list.childElementCount;
-        if (forceConfirmation && !nCredentials) {
+        if (forceDialog && !nCredentials) {
             console.warn("No data for selecting credentials.");
             dialog.close();
             logOut(true);
@@ -296,8 +304,9 @@ async function getCredential(options) {
         return Promise.reject(`Unsupported credential options: ${JSON.stringify(options)}.`);
     }
     var availableIdentities = getIds(),
-        force = availableIdentities.length > (getDb(PREVENT_SILENT_KEY) ? 0 : 1),
-        credential = await gatherCredentialWithPassword(availableIdentities, force);
+        force = getDb(PREVENT_SILENT_KEY),
+        credential = await gatherCredentialWithPassword(availableIdentities,
+                                                        {forceDialog: force});
     if (credential) {
         setDb(PREVENT_SILENT_KEY, false);
         credential.type = 'password';
@@ -316,7 +325,9 @@ function setCredential(credential) {
     if (!credential.password) {
         return Promise.reject(`Unsupported credential options: ${JSON.stringify(credential)}.`);
     }
-    // Let's assume, for now, that the caller has already put id into ids, and set name and iconURL for id.
+    // The caller, storeCredentials, has saved id, name, and iconURL. For now, we also save
+    // password here, for use with STORE_PASSWORDS true. FIXME: if we decide to use the
+    // STORE_PASSWORDS false case, this line should be removed.
     setDbSubkey(credential.id, 'password', credential.password); // see fixme in getCredential
     return Promise.resolve();
 }
@@ -332,7 +343,6 @@ function preventSilentCredentialAccess() {
 function setRegistered(id) {
     isRegistered = id;
     const disabled = 'mdc-list-item--disabled';
-    console.log('setRegistered:', id);
     if (id) {
         body.classList.add('registered');
         registerItem.classList.add(disabled);
@@ -365,8 +375,7 @@ function onAppdrawerClosed() {
     navigationButton.blur();
     // FIXME mainContent.querySelector('input, button').focus();
     // Modal drawer will close when you click on scrim: fix hash without disrupting menu choices.
-    console.log('close drawer, hash:', location.hash);
-    if (location.hash === "#navigation") location.hash = '';
+    goIf('#navigation');
 }
 function onRegistrationSubmit(e) {
     e.preventDefault();
@@ -402,13 +411,11 @@ function updateFaceResult() {
         face.classList.remove('transparent');
         face__image.classList.add('hidden');
     }
-    console.log('updateFaceResult', face.value, face, face__image);
 }
 function showFaceResult(e) {
     if (e) e.preventDefault();
 
-    console.log('showFaceResult', e, face.value, isRegistered, face__image.src);
-    if (!face.value && !isRegistered) face.value = new URL("images/profile-2.jpeg", location.href).href;
+    if (!face.value && !isRegistered) face.value = new URL("images/profile-1.jpeg", location.href).href;
     // FIXME: open camera, etc. For now, skipping that and showing a hardcoded result:
 
     updateFaceResult();
@@ -421,7 +428,7 @@ function closeRegistration() { currentRegistrationDialog && currentRegistrationD
 async function openRegistration() {
     var credential = {};
     if (isRegistered) {
-        credential = await confirmPasswordOfCurrentUser(isRegistered)
+        credential = await confirmPasswordOfCurrentUser(isRegistered);
     }
     if (!credential) return logOut(true);
     openDialog(registration, dialog => {
@@ -440,7 +447,7 @@ async function openRegistration() {
         currentRegistrationDialog = dialog;
         dialog.listen('MDCDialog:closed', _ => {
             currentRegistrationDialog = null;
-            location.hash = '';
+            goIf('#registration');
         });
     });
 }
@@ -456,34 +463,21 @@ function updateEnergy() {
     consumptionBuffer.shift();
     consumptionBuffer.push(0.75 * Math.random());
     energyBarLinearProgress.progress = average(consumptionBuffer);
-}   
-function gotoHash() {
+}
+function gotoHash(x) {
+    const hash = location.hash;
+    function is(nav) { return nav === hash; }
+    function setSheet(nav, sheet) { const should = is(nav); if (should !== sheet.open) sheet.open = should; }
+    function doDialog(nav, dialog) { is(nav) ? setTimeout(_ => dialog.open(),100) : dialog.close(); }
+    setSheet('#navigation', appdrawerDrawer);
+    setSheet('#profile', profileMenu);
+    doDialog('#energy', creditsDialog);
+    doDialog('#notImplementedIndependent', notImplementedIndependentDialog);
+    doDialog('#notImplementedDependent', notImplementedDependentDialog);
+    is('#registration') ? openRegistration() : closeRegistration();
     switch (location.hash) {
-    case '#notImplementedIndependent':
-        appdrawerDrawer.open = false;
-        setTimeout(_ => notImplementedIndependentDialog.open(), 100);
-        break;
-    case '#notImplementedDependent':
-        appdrawerDrawer.open = false;
-        setTimeout(_ => notImplementedDependentDialog.open(), 100);
-        break;
-    case '#registration':
-        setTimeout(openRegistration, 100);
-        break;
     case '#energy':
-        closeRegistration();
         energyAmount.innerText = Math.round(currentEnergy * 100).toFixed();
-        setTimeout(_ => creditsDialog.open(), 100);
-        break;
-    case '#navigation':        
-        appdrawerDrawer.open = true;
-        notImplementedIndependentDialog.close();
-        notImplementedDependentDialog.close();
-        break;
-    case '#profile':
-        profileMenu.open = true;
-        notImplementedIndependentDialog.close();
-        notImplementedDependentDialog.close();
         break;
     case '#login':
         logIn();
@@ -492,21 +486,11 @@ function gotoHash() {
     case '#logout':
         logOut();
         break;
-    case '':
-    case '#':
-        appdrawerDrawer.open = false;
-        notImplementedIndependentDialog.close();
-        notImplementedDependentDialog.close();
-        closeRegistration();
-        break;
-    default:
-        console.warn(`Unrecognized fragment identifier '${location.hash}'.`);
-        location.hash = 'notImplementedDependent';
     }
 }
 
 
- // GLOBALS
+// GLOBALS
 
 // These would be declared differently with webpack, but still the same constants.
 const MDCTopAppBar = mdc.topAppBar.MDCTopAppBar;
@@ -551,24 +535,32 @@ const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 const loggedOutSnackbar = new MDCSnackbar(loggedOut);
 const signingInSnackbar = new MDCSnackbar(signingIn);
 
-topbarTopAppBar.listen('MDCTopAppBar:nav', _ => location.hash = 'navigation');
-profileMenu.listen('MDCMenuSurface:closed', _ => (location.hash === '#profile') && (location.hash = ''));
-notImplementedIndependentDialog.listen('MDCDialog:closed', _ => location.hash = '');
-notImplementedDependentDialog.listen('MDCDialog:closed', _ => location.hash = '');
-creditsDialog.listen('MDCDialog:closed', _ => location.hash = '');
+[
+    [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
+    [notImplementedDependentDialog, 'MDCDialog:closed', '#notImplementedDependent'],
+    [creditsDialog, 'MDCDialog:closed', '#energy'],
+    [profileMenu, 'MDCMenuSurface:closed', '#profile']
+].forEach(([element, event, from, to = '']) => element.listen(event, _ => goIf(from, to)));
+
+
 appdrawerDrawer.listen('MDCDrawer:closed', onAppdrawerClosed);
-loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => ((detail.reason === 'action') && (location.hash = 'login')));
+topbarTopAppBar.listen('MDCTopAppBar:nav', _ => location.hash = 'navigation');
+loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
+    if (detail.reason === 'action') location.hash = 'login';
+});
 
-profile.addEventListener('click', _ => location.hash = 'profile');
-energyBar.addEventListener('click', _ => location.hash = 'energy');
-passwordVisibility.addEventListener('click', togglePasswordVisibility);
-faceCamera.addEventListener('click', showFaceResult);
-face.addEventListener('click', showFaceResult);
-registrationForm.addEventListener('submit', onRegistrationSubmit);
-buyEnergy.addEventListener('submit', onBuyEnergy);
-window.addEventListener('hashchange', gotoHash);
+[
+    [profile, 'profile'],
+    [energyBar, 'energy']
+].forEach(([element, hash]) => element.addEventListener('click', _ => location.hash = hash));
+[
+    [passwordVisibility, togglePasswordVisibility],
+    [faceCamera, showFaceResult],
+    [face, showFaceResult],
+    [buyEnergy, onBuyEnergy, 'submit'],
+    [window, gotoHash, 'hashchange']
+].forEach(([element, operation, event = 'click']) => element.addEventListener(event, operation));
 
-gotoHash();
-setInterval(updateEnergy, 200);
+gotoHash(99);
 logIn();
 
