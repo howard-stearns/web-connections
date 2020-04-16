@@ -125,10 +125,13 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
+          <li>bug: credentials don't get set in FF when you get the password wrong at least once</li>
+          <li>when using saved passwords, don't show the password bar unless forced (not just when single line)</lI>
+          <li>FIXME: password-saving version, with query option to see the other way</li>
+          <li>FIXME: make sure that registration (on another computer) of an existing id requires correct old password, and that a fail notifies the user</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
           <li>FIXME: adjust volume</li>
           <li>FIXME: camera processing as in prototype</li>
-          <li>FIXME: password-saving version, with query option to see the other way</li>
           <li>FIXME: sample "avatars", to id, give credits, give find-me, must for all(?)</li>
         </ul>
       </p>
@@ -177,13 +180,13 @@
       -->
       <p>Quick discussion of passwords:
         <ol>
-          <li>There is a browser API, that everyone seems to support, for working with hardware keys. That is, instead of a password, a user can tap their separate Near-Field Communication keyfob device as authentication, or touch the fingerprint id on a MacBook touchpad. The model here is compatible with the use of this API, but I didn't bother to do so because:
+          <li>There is a W3C browser API, that everyone seems to support, for working with hardware keys. That is, instead of a password, a user can tap their separate Near-Field Communication keyfob device as authentication, or touch the fingerprint id on a MacBook touchbar. The model here is compatible with the use of this API, but I didn't bother to do so because:
             <ol>
               <li>No one has such devices. E.g., an iPhone doesn't count!</li>
               <li>I'd like to implement it anyway, but it is a <i>lot</i> of fiddly code. So I figured I'd wait until everything else gets ironed out the way we want it to be.</li>
             </ol>
-          <li>There is a browser API for working with "federated credentials" from third-party providers like Google or Facebook. The model here is compatible with the use of this API, but I didn't bother to do so, because I figured that if we're so serious about privacy that we don't want to segment users or track their user experience, we certainly don't want Facebook and Google doing so!</li>
-          <li>So, that leaves passwords. On the one hand, browsers fill this in for you so, it's not <i>too</i> burdensome. On the other hand, anyone with access to your computer can see all your passwords, including the password for us. If it's that accessible, it seems silly to make the users do a meaningless autofill. <b>Should I just store the password on the machine so that the user doesn't even have to click through?</b></li>
+          <li>There is also a W3C browser API for working with "federated credentials" from third-party providers like Google or Facebook. The model here is compatible with the use of this API, but I didn't bother to do so, because I figured that if we're so serious about privacy that we don't want to segment users or track their user experience, we certainly don't want Facebook and Google doing so!</li>
+          <li>So, that leaves passwords. There's a W3C browser API for managing that in a sensible way, which I've used where it exists. Alas, it doesn't exist on Firefox or Safari yet, so I've simulated it myself. This is what you see in the demo on these browsers. <i>However...</i> to do, I've stored the user's password in site-specific storage in the browser, rather than in the non-existent password credential manager. Is anyone going to freak about that? The alternative is to not save the password in my storage, but instead make the user enter the password each time in a form, which will be autofilled from the browser anyway. I've implemented that, too, so that you can compare. Go to <a href="https://web-connections.herokuapp.com/account.html?store-passwords=false">/account.html?store-passwords=false</a> to try out that version.</li>
         </ol>
       </p>
     </div>
@@ -200,6 +203,17 @@
             <div class="mdc-button__ripple"></div>
             <span class="mdc-button__label">Sign in</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="signingIn" class="mdc-snackbar">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             role="status"
+             aria-live="polite">
+          Signing in as
+          <span id="signingIn__secondary" class="mdc-list-item__secondary-text"></span>
         </div>
       </div>
     </div>

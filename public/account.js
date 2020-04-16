@@ -31,9 +31,11 @@ function pushDbIfNew(key, value) {
 function getIds() {
     return getDb('ids') || [];
 }
-if ((getDb('version') || 0) < 1) {
+const dbVersion = 2;
+if ((getDb('version') || 0) < dbVersion) {
+    console.warn('Clearing local db.');
     localStorage.clear();
-    setDb('version', 1);
+    setDb('version', dbVersion);
 }
 
 function service(url, data, defaultProperties = {}) {
@@ -195,12 +197,22 @@ This is used in two circumstances:
    despite the pictures and confirmation for case (1). So before changing their profile, we force the
    user to enter their password, without autocomplete. This is the same UI as in the singlue user case (1),
    because we want the user to be aware of the name, picture, and email that they are entering a password for.
-*/ 
+*/
+const STORE_PASSWORDS = !location.search.includes('store-passwords=false');
 async function gatherCredentialWithPassword(ids, forceConfirmation = false, label = "Sign in", message = '') {
+    console.log('gatherCredentialsWithPasswords', ids, forceConfirmation, label);
     function getIconElement(avatar) { return avatar.querySelector('img'); }
     function getNameElement(avatar) { return avatar.querySelector('.mdc-list-item__primary-text'); }
     function getIdElement(avatar) { return avatar.querySelector('.mdc-list-item__secondary-text'); }
+    const passwords = STORE_PASSWORDS && !forceConfirmation && []
     var credential = {};
+    if (!ids.length && !forceConfirmation) return;
+    if (passwords && (ids.length === 1)) {
+        const cred = getDb(ids[0]);
+        cred.id = signingIn__secondary.innerHTML = ids[0];
+        signingInSnackbar.open()
+        return cred;
+    }
     selectUser__context.innerText = label;
     const confirmation = await openDialog(selectUser, dialog => {
         const password = document.importNode(selectUserTemplate.content.lastElementChild, true),
@@ -208,6 +220,7 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
               visibility = password.querySelector('button'),
               input = password.querySelector('input'),
               accept = selectUser.querySelector('button[data-mdc-dialog-action="yes"]');
+        console.log('passwords', passwords);
         accept.querySelector('.mdc-button__label').innerText = label;
         function setCredential(index) {
             const selected = selectUser__list.children[index];
@@ -215,7 +228,7 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
                 id: getIdElement(selected).innerText,
                 name: getNameElement(selected).innerText,
                 iconURL: getIconElement(selected).src,
-                password: input.value,
+                password: passwords ? passwords[index] : input.value,
             };
         }
         // Populate the users to select from.
@@ -223,11 +236,12 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
         ids.forEach(id => {
             const data = getDb(id);
             if (!data) return console.warn(`No data for ${id}.`);
-            const {name, iconURL} = data;
+            const {name, iconURL, password} = data;
             const avatar = document.importNode(selectUserTemplate.content.firstElementChild, true);
             getIconElement(avatar).src = iconURL;
             getNameElement(avatar).innerText = name;
             getIdElement(avatar).innerText = id;
+            if (passwords) passwords.push(password);
             new MDCRipple(avatar);
             selectUser__list.appendChild(avatar);
         });
@@ -236,31 +250,32 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
             accept.disabled = !credential.id;
             credential.password = e.target.value;
         }
-        accept.disabled = true;
+        accept.disabled = !passwords;
         if (forceConfirmation) {
             // Hmmm. MDN says this is bad, and indeed browsers don't listen to this for password fields
             // presumably because they want long passwords that no one can type. But then,
             // how do you avoid letting everyone on the computer see your password???
             input.setAttribute('autocomplete', 'off');
         }
-        switch (selectUser__list.childElementCount) {
-        case 0:
+        const nCredentials = selectUser__list.childElementCount;
+        if (forceConfirmation && !nCredentials) {
             console.warn("No data for selecting credentials.");
             dialog.close();
             logOut(true);
-            break;
-        case 1:
+        } else if (nCredentials === 1) {
             setCredential(0);
-            break;
         }
-        selectUser__list.appendChild(password);
+        if (!passwords) {
+            selectUser__list.appendChild(password);
+        }
         const fields = instantiateFields(password);
         // Initialize the MDC list.
         instantiateAndLayoutLists(selectUser);
         mdcObjects.get(selectUser__list).listen('MDCList:action', ({detail}) => {
             if (detail.index === passwordIndex) return;
-            accept.disabled = !input.value;
+            accept.disabled = !input.value && !passwords;
             setCredential(detail.index);
+            if (passwords) dialog.close('yes');
         });
     });
     if (confirmation !== 'yes') return;
@@ -281,9 +296,8 @@ async function getCredential(options) {
         return Promise.reject(`Unsupported credential options: ${JSON.stringify(options)}.`);
     }
     var availableIdentities = getIds(),
-        credential = await gatherCredentialWithPassword(availableIdentities,
-                                                        (getDb(PREVENT_SILENT_KEY)
-                                                         || availableIdentities.length > 1));
+        force = availableIdentities.length > (getDb(PREVENT_SILENT_KEY) ? 0 : 1),
+        credential = await gatherCredentialWithPassword(availableIdentities, force);
     if (credential) {
         setDb(PREVENT_SILENT_KEY, false);
         credential.type = 'password';
@@ -394,7 +408,7 @@ function showFaceResult(e) {
     if (e) e.preventDefault();
 
     console.log('showFaceResult', e, face.value, isRegistered, face__image.src);
-    if (!face.value && !isRegistered) face.value = new URL("images/profile-1.jpeg", location.href).href;
+    if (!face.value && !isRegistered) face.value = new URL("images/profile-2.jpeg", location.href).href;
     // FIXME: open camera, etc. For now, skipping that and showing a hardcoded result:
 
     updateFaceResult();
@@ -535,6 +549,7 @@ const purchaseAmountFloatingLabel = new MDCFloatingLabel(purchaseAmount__floatin
 const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 
 const loggedOutSnackbar = new MDCSnackbar(loggedOut);
+const signingInSnackbar = new MDCSnackbar(signingIn);
 
 topbarTopAppBar.listen('MDCTopAppBar:nav', _ => location.hash = 'navigation');
 profileMenu.listen('MDCMenuSurface:closed', _ => (location.hash === '#profile') && (location.hash = ''));
@@ -557,41 +572,3 @@ gotoHash();
 setInterval(updateEnergy, 200);
 logIn();
 
-
-
-
-
-/*
-// UNUSED STUFF
-const userId = "123";
-const challengeFromServer = "something with time";
-function charCode(oneCharString) { return oneCharString.charCodeAt(0); }
-
-function getCredentials() {
-    navigator.credentials.get({password: true}).then(console.log);
-}
-
-function createPasswordCredentials() {
-    navigator.credentials.create({
-        password: { // find out about this being a form
-            id: "passwordId",
-            name: "passwordUsername",
-            password: "passwordPassword"
-        }
-    }).catch(e => {
-        console.error(e);
-        alert(e);
-    }).then(r => {
-        console.log(r);
-    });
-}
-profileMenu.listen('MDCList:action', ({detail})  => {
-    switch (detail.index) {
-    case 2:
-        setTimeout(_ => location.hash = 'registration', 100);
-        break;
-    default:
-        location.hash = 'notImplementedDependent';
-    }
-});
-*/

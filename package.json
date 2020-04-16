@@ -18,7 +18,9 @@
         "express-ws": "^4.0.0",
         "face-api.js": "^0.22.2",
         "morgan": "^1.9.1",
-        "redis": "^3.0.2"
+        "redis": "^3.0.2",
+        "unique-names-generator": "^4.2.0",
+        "uuid": "^3.0.0"
     },
     "devDependencies": {
         "jasmine": "^3.5.0"
