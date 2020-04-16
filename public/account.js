@@ -110,7 +110,6 @@ async function tryPasswordLogin(credential) {
             return tryPasswordLogin(cred);
         });
 }
-            
 function logIn() {
     return getCredential({
         password: true,
@@ -454,6 +453,7 @@ var currentRegistrationDialog;
 function closeRegistration() { currentRegistrationDialog && currentRegistrationDialog.close(); }
 async function openRegistration() {
     var credential = {};
+    await initialSetUp;
     if (isRegistered) {
         credential = await confirmPasswordOfCurrentUser(isRegistered);
     }
@@ -589,6 +589,5 @@ loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
     [window, gotoHash, 'hashchange']
 ].forEach(([element, operation, event = 'click']) => element.addEventListener(event, operation));
 
+const initialSetUp = logIn();
 gotoHash(99);
-logIn();
-
