@@ -9,6 +9,8 @@ const morgan = require('morgan')
 const pseudo = require('./pseudo-request');
 const pkg = require('./package.json');
 const redis = process.env.REDIS_URL && require('redis').createClient(process.env.REDIS_URL);
+const uuidv4  = require('uuid/v4');
+const { uniqueNamesGenerator, adjectives, colors, animals } = require('unique-names-generator');
 
 process.title = "p2p-load-test";
 const app = express();
@@ -17,7 +19,63 @@ app.set('trust proxy', true);
 const logger = morgan('common');
 pseudo.configure(logger);
 
+const namesConfig = {
+    dictionaries: [adjectives, colors, animals],
+    style: 'capitol'
+};
+
 if (redis) redis.on('error', console.error);
+
+/*
+In database:
+userid => {displayName, passwordHash, emails, faces, keypairs}
+email1 => userid; email2 => userid; ...
+*/
+
+// FIXME: this first go is in-memory, not redis
+const fakeDb = {};
+function listify(entry, existingKey, existing) {
+    var list = existing[existingKey];
+    if (!list) {
+        list = existing[existingKey] = [];
+    }
+    if (list.includes(entry)) return;
+    list.push(entry);
+}
+function makeTransformer(existingKey) {
+    return (entry, existing) => listify(entry, existingKey, existing);
+}
+const transformers = {
+    email: makeTransformer('emails'),
+    oldEmail: _ => {},
+    face: makeTransformer('faces')
+};
+function setUser(data) {
+    var emailKey = data.oldEmail || data.email;
+    var userid = fakeDb[emailKey];
+    if (!userid) {
+        userid = uuidv4();
+        fakeDb[emailKey] = userid;
+    }
+    if (data.oldEmail && data.email && !fakeDb[data.email]) {
+        fakeDb[data.email] = userid;
+    }
+    var user = fakeDb[userid];
+    if (!user) user = fakeDb[userid] = {};
+    Object.keys(data).forEach(key => {
+        const f = transformers[key] || ((entry, existing) => existing[key] = entry);
+        f(data[key], user);
+    });
+    return Promise.resolve();
+}
+function getUser(email) {
+    const userid = fakeDb[email];
+    if (!userid) return Promise.reject(new Error(`No such email: ${email}.`));
+    const user = fakeDb[userid];
+    if (!user) return Promise.reject(new Error(`No user for email: ${email}.`));
+    return Promise.resolve(user);
+}
+
 
 app.use(logger);
 app.use(express.static('public'));
@@ -28,6 +86,10 @@ function rawBodySaver(req, res, buf, encoding) {
 }
 app.use(bodyParser.json({verify: rawBodySaver, limit: '50mb'}));
 app.use(bodyParser.urlencoded({extended: true}));
+
+function jsonHead(res) {
+    res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
+}
 
 const CREDITS_PER_MS = 1.667;
 app.post('/upload', function (req, res) {
@@ -65,7 +127,7 @@ app.post('/upload', function (req, res) {
             // Good form to send content-type. E.g., because the client is using XMLHttpRequest
             // for MSIE compatability, Firefox will spit out a noisy error about the response not
             // being good XML (unless we declare the content-type).
-            res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
+            jsonHead(res);
             res.end(data);
         });
     });
@@ -133,7 +195,7 @@ app.post('/message', function (req, res) {
     } else {
         messageId = sendSSE(clientPipe, req.rawBody, req.body.type);
     }
-    res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
+    jsonHead(res);
     res.end(JSON.stringify({id: messageId}));
 });
 
@@ -168,7 +230,7 @@ app.post('/submitFace', function (req, res) {
         if (index < 0) index = matches.length;
         // Give answer.
         const results = matches.slice(0, 1 + index);
-        res.writeHead(200, {"Content-Type": "application/json;charset=UTF-8"});
+        jsonHead(res);
         res.end(JSON.stringify(results));
     }
     redis.rpush(category, req.rawBody, function (error, data) {
@@ -178,6 +240,31 @@ app.post('/submitFace', function (req, res) {
             compare(data.map(JSON.parse));
         });
     });
+});
+
+function promiseResponse(res, promise) {
+    return promise
+        .catch(e => ({error: e.message || e}))
+        .then(data => {
+            console.log('responding with:', data);
+            jsonHead(res);
+            res.end(JSON.stringify(data));
+        });
+}
+app.post('/registration', function (req, res) {
+    const {id, oldEmail, name, iconURL, password} = req.body;
+    promiseResponse(res,
+                    setUser({email:id, oldEmail, displayName:name, face:iconURL, password})
+                    .then(_ => getUser(id))); // For debugging at client
+});
+app.post('/login', function (req, res) {
+    const {id, password} = req.body;
+    promiseResponse(res,
+                    id
+                    ? getUser(id).then(user => (password === user.password)
+                                       ? {}
+                                       : Promise.reject(new Error("Password does not match.")))
+                    : Promise.resolve({name: uniqueNamesGenerator(namesConfig)}));
 });
 
 var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.

@@ -125,7 +125,6 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: server login and update</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
           <li>FIXME: adjust volume</li>
           <li>FIXME: camera processing as in prototype</li>
@@ -135,11 +134,12 @@
       </p>
       <p>This demo is a real implementation of accounts, <i>except</i>:
         <ul class="notImplemented">
-          <li>internal db (indexDb instead of localStorage)
+          <li>internal server db (redis instead of memory that is lost when server shuts down)
           <li>internal keys</li>
           <li>enforce energy consumption (needs keys). The demo is consuming randomly.</li>
           <li>UI theme</li>
           <li>unit tests</li>
+          <li>scale internal client db (localStorage is fine for now, but indexDb is better)
           <li>email service</li>
           <li>credit card service</li>
           <li>nofication (with service?) (interacts with add-to-home-screen)</li>
@@ -156,11 +156,13 @@
           <li>Does not require login to start.</li>
           <li>Keeps track of login (but confirms when needed).</li>
           <li>Allows multiple users to share a machine (e.g., on desktop).</li>
+          <li>Trys softly to get you to register, and if you are, tries to get you to use your login.</li>
           <li>Always clear who you are (including anonymous), and groups account-related stuff together.</li>
           <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
           <li>It doesn't ask for a credit card until you try to buy something, even during registration.</li>
         </ul>
       </p>
+      <!--
       <ol>
         <li>Try changing display name or spending money before registering</li>
         <li>Register, either from the above or from (user) => Register.</li>
@@ -172,6 +174,7 @@
         <li>Try transfering money (and try leaving that dialog alone for 20 seconds).</li>
         <li>Try browser refresh and back/forward in various cases. There are some very subtle cases when the browser has multiple accounts stored.</li>
       </ol>
+      -->
       <p>Quick discussion of passwords:
         <ol>
           <li>There is a browser API, that everyone seems to support, for working with hardware keys. That is, instead of a password, a user can tap their separate Near-Field Communication keyfob device as authentication, or touch the fingerprint id on a MacBook touchpad. The model here is compatible with the use of this API, but I didn't bother to do so because:
@@ -185,6 +188,22 @@
       </p>
     </div>
 
+    <div id="loggedOut" class="mdc-snackbar">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             role="status"
+             aria-live="polite">
+          Signed out.
+        </div>
+        <div class="mdc-snackbar__actions">
+          <button type="button" class="mdc-button mdc-snackbar__action">
+            <div class="mdc-button__ripple"></div>
+            <span class="mdc-button__label">Sign in</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    
     <!-- Dialogs  -->
     <div id="notImplementedIndependent" class="mdc-dialog">
       <div class="mdc-dialog__container">
@@ -240,7 +259,7 @@
              aria-describedby="selectUser-content">
           <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
           <h2 class="mdc-dialog__title" id="selectUser-title"><span id="selectUser__context">Sign in</span> as</h2>
-          <div class="mdc-dialog__content" id="not-implemented-content">
+          <div class="mdc-dialog__content">
             <template id="selectUserTemplate">
               <li class="mdc-list-item">
                 <img class="mdc-list-item__graphic" aria-hidden="true" />
@@ -367,7 +386,7 @@
             <div class="mdc-dialog__content" id="registration-content">
               <div class="onlyUnregistered">
                 <p>Registration is free.</p>
-                <p>Only registered users can change their display name, or get more <a href="#energy">energy</a>.</p>
+                <p>Only registered users can change their display name, strength, or get more <a href="#energy">energy</a>.</p>
               </div>
               <div class="onlyRegistered">
                 You can change any of these current settings.
@@ -410,6 +429,7 @@
                     <div class="list-item__text-field-container">
                       <label id="email__label" class="mdc-text-field mdc-text-field--outlined" for="email">
                         <input id="email" type="email" class="mdc-text-field__input" aria-labelledby="email__floatingLabel" autocomplete="email" required>
+                        <input id="oldEmail" type="hidden">
                         <div id="email__outline" class="mdc-notched-outline">
                           <div class="mdc-notched-outline__leading"></div>
                           <div class="mdc-notched-outline__notch">

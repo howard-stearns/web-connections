@@ -31,27 +31,47 @@ function pushDbIfNew(key, value) {
 function getIds() {
     return getDb('ids') || [];
 }
+if ((getDb('version') || 0) < 1) {
+    localStorage.clear();
+    setDb('version', 1);
+}
+
+function service(url, data, defaultProperties = {}) {
+    return fetch(url, {
+        method: 'post',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(json => json.error
+              ? Promise.reject(new Error(json.error))
+              : Object.assign(defaultProperties, json));
+}
 
 var isRegistered = false;
 
 function unregisteredLogin() {
     // FIXME: do we have what we need in cookies? Do we need to contact the server again?
     setRegistered(false);
-    return Promise.resolve({
+    return service('/login', {}, {  // UI should still work on failure.
         iconURL: "images/anonymous.jpg",
-        name: "Teal-raptor-1234" // FIXME
+        name: "anonymous"
     });
 }
 function passwordLogin({id, password, name, iconURL}) {
     // Get decription key and update keys. Else reject.
-    console.info(`Pretending to login '${id}' / '${password}'.`);
     setRegistered(id);
-    return Promise.resolve({iconURL, name, id, password});
+    return service('/login', {id, password}, {iconURL, name, id, password});
 }
 function createOrUpdateRegistration(options) { // on server
-    return Promise.resolve(options); // FIXME
+    return service('/registration', options, options);
 }
 function handleSuccessfulLogin(keysAndSuch) {
+    console.log('login result', keysAndSuch);
+    if (!keysAndSuch) return Promise.resolve();
     return Promise.resolve(setupUser(keysAndSuch)); // FIXME: update keystore if needed
 }
 function storeCredentials(options) {
@@ -70,31 +90,46 @@ function register(options) {
         .then(_ => setRegistered(options.id))
         .then(_ => location.hash = '');
 }
-function logOut() {
-    preventSilentCredentialAccess()
+function logOut(notify = false) {
+    return preventSilentCredentialAccess()
         .then(unregisteredLogin)
-        .then(handleSuccessfulLogin);
+        .then(handleSuccessfulLogin)
+        .then(_ => location.hash = '')
+        .then(_ => notify && loggedOutSnackbar.open());
 }
-function ensureCredentials() {
+function logIn() {
     return getCredential({
         password: true,
         mediation: "optional"
     })
-        .catch(e => {console.error(e);})
         .then(credential => {
             console.log('stored credentials are:', credential);
             if (!credential) return unregisteredLogin();
-            if (credential.type) {
-                return passwordLogin(credential);
-            }
+            if (credential.type === 'password')
+                return passwordLogin(credential).catch(e => {
+                    const cred = confirmPasswordOfCurrentUser(credential.id, e);
+                    if (!cred) return logOut(true);
+                    handleSuccessfulLogin(cred);
+                });
             const message = `Unrecognized credential type ${credential.type}.`;
             return Promise.reject(message);
-        });
-}
-function logIn() {
-    ensureCredentials()
-        .catch(console.error)
+        })
         .then(handleSuccessfulLogin)
+}
+
+async function confirmPasswordOfCurrentUser(id, e) {// Answers credential if successful, otherwise falsey
+    if (e) console.error(e);
+    const credential = await gatherCredentialWithPassword([id], true, "Confirm", e && e.message);
+    console.log('gathered credential', credential);
+    if (!credential) return; // dismissed
+    try {
+        await passwordLogin(credential);
+    } catch (e) {
+        console.log('got error', e);
+        return confirmPasswordOfCurrentUser(id, e);
+    }
+    console.log('confirm password answering', credential);
+    return credential;
 }
 
 // UI LOGIC
@@ -161,7 +196,7 @@ This is used in two circumstances:
    user to enter their password, without autocomplete. This is the same UI as in the singlue user case (1),
    because we want the user to be aware of the name, picture, and email that they are entering a password for.
 */ 
-async function gatherCredentialWithPassword(ids, forceConfirmation = false, label = "Sign in") {
+async function gatherCredentialWithPassword(ids, forceConfirmation = false, label = "Sign in", message = '') {
     function getIconElement(avatar) { return avatar.querySelector('img'); }
     function getNameElement(avatar) { return avatar.querySelector('.mdc-list-item__primary-text'); }
     function getIdElement(avatar) { return avatar.querySelector('.mdc-list-item__secondary-text'); }
@@ -186,7 +221,9 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
         // Populate the users to select from.
         selectUser__list.innerHTML = '';
         ids.forEach(id => {
-            const {name, iconURL} = getDb(id);
+            const data = getDb(id);
+            if (!data) return console.warn(`No data for ${id}.`);
+            const {name, iconURL} = data;
             const avatar = document.importNode(selectUserTemplate.content.firstElementChild, true);
             getIconElement(avatar).src = iconURL;
             getNameElement(avatar).innerText = name;
@@ -206,11 +243,18 @@ async function gatherCredentialWithPassword(ids, forceConfirmation = false, labe
             // how do you avoid letting everyone on the computer see your password???
             input.setAttribute('autocomplete', 'off');
         }
+        switch (selectUser__list.childElementCount) {
+        case 0:
+            console.warn("No data for selecting credentials.");
+            dialog.close();
+            logOut(true);
+            break;
+        case 1:
+            setCredential(0);
+            break;
+        }
         selectUser__list.appendChild(password);
         const fields = instantiateFields(password);
-        if (ids.length === 1) {
-            setCredential(0);
-        }
         // Initialize the MDC list.
         instantiateAndLayoutLists(selectUser);
         mdcObjects.get(selectUser__list).listen('MDCList:action', ({detail}) => {
@@ -274,6 +318,7 @@ function preventSilentCredentialAccess() {
 function setRegistered(id) {
     isRegistered = id;
     const disabled = 'mdc-list-item--disabled';
+    console.log('setRegistered:', id);
     if (id) {
         body.classList.add('registered');
         registerItem.classList.add(disabled);
@@ -313,6 +358,7 @@ function onRegistrationSubmit(e) {
     e.preventDefault();
     register({
         id: email.value,
+        oldEmail: oldEmail.value,
         name: displayName.value,
         iconURL: face.value,
         password: password.value
@@ -355,19 +401,19 @@ function showFaceResult(e) {
     face.blur();
     // FIXME: also put a transparent mask over input to block clicks so that no one messes up the text
 }
+
 var currentRegistrationDialog;
 function closeRegistration() { currentRegistrationDialog && currentRegistrationDialog.close(); }
 async function openRegistration() {
     var credential = {};
     if (isRegistered) {
-        credential = await gatherCredentialWithPassword([isRegistered], true, "Confirm");
-        if (!credential) return;
-        await passwordLogin(credential);
+        credential = await confirmPasswordOfCurrentUser(isRegistered)
     }
+    if (!credential) return logOut(true);
     openDialog(registration, dialog => {
         face.value = credential.iconURL || '';
         displayName.value = credential.name || '';
-        email.value = credential.id || '';
+        oldEmail.value = email.value = credential.id || '';
         password.value = credential.password || '';
         register__submit.value = isRegistered ? "Update" : "Register";
         const fields = instantiateFields(registration);
@@ -431,7 +477,6 @@ function gotoHash() {
         break;
     case '#logout':
         logOut();
-        location.hash = '';        
         break;
     case '':
     case '#':
@@ -463,6 +508,7 @@ const MDCTextFieldHelperText = mdc.textField.MDCTextFieldHelperText;
 const MDCFloatingLabel = mdc.floatingLabel.MDCFloatingLabel;
 const MDCNotchedOutline = mdc.notchedOutline.MDCNotchedOutline;
 const MDCLinearProgress = mdc.linearProgress.MDCLinearProgress
+const MDCSnackbar = mdc.snackbar.MDCSnackbar;
 
 // UI INITIALIZATION
 
@@ -488,12 +534,15 @@ const purchaseAmountFloatingLabel = new MDCFloatingLabel(purchaseAmount__floatin
 
 const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 
+const loggedOutSnackbar = new MDCSnackbar(loggedOut);
+
 topbarTopAppBar.listen('MDCTopAppBar:nav', _ => location.hash = 'navigation');
 profileMenu.listen('MDCMenuSurface:closed', _ => (location.hash === '#profile') && (location.hash = ''));
 notImplementedIndependentDialog.listen('MDCDialog:closed', _ => location.hash = '');
 notImplementedDependentDialog.listen('MDCDialog:closed', _ => location.hash = '');
 creditsDialog.listen('MDCDialog:closed', _ => location.hash = '');
 appdrawerDrawer.listen('MDCDrawer:closed', onAppdrawerClosed);
+loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => ((detail.reason === 'action') && (location.hash = 'login')));
 
 profile.addEventListener('click', _ => location.hash = 'profile');
 energyBar.addEventListener('click', _ => location.hash = 'energy');
