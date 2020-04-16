@@ -125,7 +125,9 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
+          <li>FIXME: login cancel/failure with ?store-passwords=false causes bad cred display 
           <li>FIXME: make sure that registration (on another browser) of an existing id requires correct old password, and that a fail notifies the user</li>
+          <li>FIXME: when you change personal data, it has to propogate to other machines</li>
           <li>FIXME: forget me</li>
           <li>FIXME: camera processing as in prototype</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
@@ -156,8 +158,9 @@
         <ul class="implemented">
           <li>Does not require login to start.</li>
           <li>Keeps track of login (but confirms when needed).</li>
+          <li>Keep track of account info (email, face) and propogates to other registered machines (upon successful login).</li>
           <li>Allows multiple users to share a machine (e.g., on desktop).</li>
-          <li>Trys softly to get you to register, and if you are, tries to get you to use your login.</li>
+          <li>Tries softly to get you to register, and if you are, tries to get you to use your login.</li>
           <li>Always clear who you are (including anonymous), and groups account-related stuff together.</li>
           <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
           <li>It doesn't ask for a credit card until you try to buy something, even during registration.</li>

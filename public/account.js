@@ -99,23 +99,25 @@ function logOut(notify = false) {
         .then(_ => location.hash = '')
         .then(_ => notify && loggedOutSnackbar.open());
 }
+// Login and promise the result. But if login is rejected,
+// confirm password and repeat until either success or password is dismissed.
+async function tryPasswordLogin(credential) {
+    if (!credential || (credential.type !== 'password')) return;
+    return passwordLogin(credential)
+        .catch(async e => {
+            const cred = await confirmPasswordOfCurrentUser(credential.id, e);
+            if (!cred) return;
+            return tryPasswordLogin(cred);
+        });
+}
+            
 function logIn() {
     return getCredential({
         password: true,
         mediation: "optional"
     })
-        .then(credential => {
-            if (!credential) return unregisteredLogin();
-            if (credential.type === 'password')
-                return passwordLogin(credential).catch(e => {
-                    const cred = confirmPasswordOfCurrentUser(credential.id, e);
-                    if (!cred) return logOut(true);
-                    handleSuccessfulLogin(cred);
-                });
-            const message = `Unrecognized credential type ${credential.type}.`;
-            return Promise.reject(message);
-        })
-        .then(handleSuccessfulLogin)
+        .then(tryPasswordLogin)
+        .then(cred => cred ? handleSuccessfulLogin(cred) : logOut(true));
 }
 
 async function confirmPasswordOfCurrentUser(id, e) {// Answers credential if successful, otherwise falsey
@@ -141,8 +143,14 @@ async function confirmPasswordOfCurrentUser(id, e) {// Answers credential if suc
 function openDialog(dialogDomElement, onOpen=null) { // Answer a promise that resolves to the action taken
     const dialog = new MDCDialog(dialogDomElement);
     return new Promise(resolve => {
-        if (onOpen) dialog.listen('MDCDialog:opened', _ => onOpen(dialog));
-        dialog.listen('MDCDialog:closed', event => resolve(event.detail.action));
+        const opened = onOpen && (_ => onOpen(dialog)),
+              closed = event => {
+                  resolve(event.detail.action);
+                  if (onOpen) dialog.unlisten('MDCDialog:opened', opened);
+                  dialog.unlisten('MDCDialog:closed', closed);
+              };
+        if (onOpen) dialog.listen('MDCDialog:opened', opened);
+        dialog.listen('MDCDialog:closed', closed);
         dialog.open();
     });
 }
@@ -216,7 +224,7 @@ async function gatherCredentialWithPassword(ids, {
     function getNameElement(avatar) { return avatar.querySelector('.mdc-list-item__primary-text'); }
     function getIdElement(avatar) { return avatar.querySelector('.mdc-list-item__secondary-text'); }
     const passwords = STORE_PASSWORDS && !forcePassword && []
-    var credential = {};
+    var credential = {}, cleanup;
     if (!ids.length && !forceDialog) return;
     if ((ids.length === 1) && !forceDialog) { // No need for dialog. Just a snackbar notification.
         const cred = getDb(ids[0]);
@@ -230,20 +238,26 @@ async function gatherCredentialWithPassword(ids, {
               passwordIndex = ids.length,
               visibility = password.querySelector('button'),
               input = password.querySelector('input'),
-              accept = selectUser.querySelector('button[data-mdc-dialog-action="yes"]');
+              accept = selectUser.querySelector('button[data-mdc-dialog-action="yes"]'),
+              // Kludge alert:
+              // MDC listen/unlisten doesn't seem to work on this list (see cleanup), so
+              // cons a new one.
+              list = selectUser__list.cloneNode(true);
+        selectUser__list.parentNode.replaceChild(list, selectUser__list);
         if (passwords && (ids.length > 1)) {
             accept.classList.add('hidden');
         } else {
             accept.querySelector('.mdc-button__label').innerText = label;
             accept.disabled = !passwords;
-        }
-        function setCredential(index) {
+        }        
+        function setCredentialFrom(index) {
             const selected = selectUser__list.children[index];
             credential = {
-                id: getIdElement(selected).innerText,
+                id: getIdElement(selected).innerText, // FIXME coming up null in store-passwords=false
                 name: getNameElement(selected).innerText,
                 iconURL: getIconElement(selected).src,
                 password: passwords ? passwords[index] : input.value,
+                type: 'password'
             };
         }
         // Populate the users to select from.
@@ -271,7 +285,7 @@ async function gatherCredentialWithPassword(ids, {
             dialog.close();
             logOut(true);
         } else if (nCredentials === 1) {
-            setCredential(0);
+            setCredentialFrom(0);
         }
         if (!passwords) {
             selectUser__list.appendChild(password);
@@ -279,13 +293,17 @@ async function gatherCredentialWithPassword(ids, {
         const fields = instantiateFields(password);
         // Initialize the MDC list.
         instantiateAndLayoutLists(selectUser);
-        mdcObjects.get(selectUser__list).listen('MDCList:action', ({detail}) => {
+        function select({detail}) {
             if (detail.index === passwordIndex) return;
             accept.disabled = !input.value && !passwords;
-            setCredential(detail.index);
+            setCredentialFrom(detail.index);
             if (passwords) dialog.close('yes');
-        });
+        }
+        var selectMDC = mdcObjects.get(selectUser__list);
+        selectMDC.listen('MDCList:action', select);
+        cleanup = _ => selectMDC.unlisten('MDCList:action', select);
     });
+    if (cleanup) cleanup();
     if (confirmation !== 'yes') return;
     return credential;
 }
@@ -415,7 +433,7 @@ function updateFaceResult() {
 function showFaceResult(e) {
     if (e) e.preventDefault();
 
-    if (!face.value && !isRegistered) face.value = new URL("images/profile-1.jpeg", location.href).href;
+    if (!face.value && !isRegistered) face.value = new URL("images/profile-2.jpeg", location.href).href;
     // FIXME: open camera, etc. For now, skipping that and showing a hardcoded result:
 
     updateFaceResult();
@@ -557,6 +575,7 @@ loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
     [passwordVisibility, togglePasswordVisibility],
     [faceCamera, showFaceResult],
     [face, showFaceResult],
+    [registrationForm, onRegistrationSubmit, 'submit'],
     [buyEnergy, onBuyEnergy, 'submit'],
     [window, gotoHash, 'hashchange']
 ].forEach(([element, operation, event = 'click']) => element.addEventListener(event, operation));
