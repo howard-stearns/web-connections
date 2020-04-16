@@ -50,7 +50,15 @@ const transformers = {
     oldEmail: _ => {},
     face: makeTransformer('faces')
 };
-function setUser(data) {
+
+function passwordFail(user, options) {
+    // Subtle: 'auth' in options is true if password is supplied at all, even as undefined.
+    if (('auth' in options) && (user.password !== options.auth)) {
+        return Promise.reject(new Error("Password does not match."));
+    }
+}
+
+function setUser(data, options) {
     var emailKey = data.oldEmail || data.email;
     var userid = fakeDb[emailKey];
     if (!userid) {
@@ -61,21 +69,25 @@ function setUser(data) {
         fakeDb[data.email] = userid;
     }
     var user = fakeDb[userid];
-    if (!user) user = fakeDb[userid] = {};
+    if (user) {
+        const fail = passwordFail(user, options);
+        if (fail) return fail;
+    } else {
+        user = fakeDb[userid] = {};
+    }
     Object.keys(data).forEach(key => {
         const f = transformers[key] || ((entry, existing) => existing[key] = entry);
         f(data[key], user);
     });
-    return Promise.resolve();
+    return Promise.resolve(user); // Return whole user so callers can update. (Future uses might make optional.)
 }
-function getUser(email) {
+function getUser(email, options) {
     const userid = fakeDb[email];
     if (!userid) return Promise.reject(new Error(`No such email: ${email}.`));
     const user = fakeDb[userid];
     if (!user) return Promise.reject(new Error(`No user for email: ${email}.`));
-    return Promise.resolve(user);
+    return passwordFail(user, options) || Promise.resolve(user);
 }
-
 
 app.use(logger);
 app.use(express.static('public'));
@@ -252,18 +264,16 @@ function promiseResponse(res, promise) {
         });
 }
 app.post('/registration', function (req, res) {
-    const {id, oldEmail, name, iconURL, password} = req.body;
+    const {id, oldEmail, name, iconURL, password, oldPassword} = req.body;
     promiseResponse(res,
-                    setUser({email:id, oldEmail, displayName:name, face:iconURL, password})
-                    .then(_ => getUser(id))); // For debugging at client
+                    setUser({email:id, oldEmail, displayName:name, face:iconURL, password},
+                            {auth: oldPassword || password}));
 });
 app.post('/login', function (req, res) {
     const {id, password} = req.body;
     promiseResponse(res,
                     id
-                    ? getUser(id).then(user => (password === user.password)
-                                       ? {}
-                                       : Promise.reject(new Error("Password does not match.")))
+                    ? getUser(id, {auth: password})
                     : Promise.resolve({name: uniqueNamesGenerator(namesConfig)}));
 });
 

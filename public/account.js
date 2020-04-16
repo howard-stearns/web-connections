@@ -31,7 +31,7 @@ function pushDbIfNew(key, value) {
 function getIds() {
     return getDb('ids') || [];
 }
-const dbVersion = 2;
+const dbVersion = 4;
 if ((getDb('version') || 0) < dbVersion) {
     console.warn('Clearing local db.');
     localStorage.clear();
@@ -48,9 +48,9 @@ function service(url, data, defaultProperties = {}) {
         body: JSON.stringify(data)
     })
         .then(response => response.json())
-        .then(json => json.error
+        .then(json => {console.log('server:', json); return json.error
               ? Promise.reject(new Error(json.error))
-              : Object.assign(defaultProperties, json));
+                       : Object.assign(defaultProperties, json)});
 }
 
 var isRegistered = false;
@@ -408,6 +408,7 @@ function onRegistrationSubmit(e) {
     register({
         id: email.value,
         oldEmail: oldEmail.value,
+        oldPassword: oldPassword.value,
         name: displayName.value,
         iconURL: face.value,
         password: password.value
@@ -441,7 +442,7 @@ function updateFaceResult() {
 function showFaceResult(e) {
     if (e) e.preventDefault();
 
-    if (!face.value && !isRegistered) face.value = new URL("images/profile-2.jpeg", location.href).href;
+    if (!face.value && !isRegistered) face.value = new URL("images/profile-1.jpeg", location.href).href;
     // FIXME: open camera, etc. For now, skipping that and showing a hardcoded result:
 
     updateFaceResult();
@@ -462,7 +463,7 @@ async function openRegistration() {
         face.value = credential.iconURL || '';
         displayName.value = credential.name || '';
         oldEmail.value = email.value = credential.id || '';
-        password.value = credential.password || '';
+        oldPassword.value = password.value = credential.password || '';
         register__submit.value = isRegistered ? "Update" : "Register";
         const fields = instantiateFields(registration);
         const lists = instantiateAndLayoutLists(registration);

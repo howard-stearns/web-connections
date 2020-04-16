@@ -15,10 +15,15 @@
 .instructions {
     text-align: center;
 }
-audio {
-    display: none;
-}
+
 video {
-    max-width: 480px;
+    max-width: 100%;
     height: auto;
+}
+
+@media (min-width: 300px) {
+    video {
+        max-width: 300px;
+        height: auto;
+    }
 }

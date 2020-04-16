@@ -125,8 +125,6 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: login cancel/failure with ?store-passwords=false causes bad cred display 
-          <li>FIXME: make sure that registration (on another browser) of an existing id requires correct old password, and that a fail notifies the user</li>
           <li>FIXME: when you change personal data, it has to propogate to other machines</li>
           <li>FIXME: forget me</li>
           <li>FIXME: camera processing as in prototype</li>
@@ -445,6 +443,7 @@
                       <label id="email__label" class="mdc-text-field mdc-text-field--outlined" for="email">
                         <input id="email" type="email" class="mdc-text-field__input" aria-labelledby="email__floatingLabel" autocomplete="email" required>
                         <input id="oldEmail" type="hidden">
+                        <input id="oldPassword" type="hidden">
                         <div id="email__outline" class="mdc-notched-outline">
                           <div class="mdc-notched-outline__leading"></div>
                           <div class="mdc-notched-outline__notch">
