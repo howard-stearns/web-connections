@@ -140,8 +140,11 @@ async function confirmPasswordOfCurrentUser(id, e) {// Answers credential if suc
 // UI LOGIC
 
 // FIXME: there are a couple of places where we should be doing MDCList.layout, but aren't. Should we use this?
-function openDialog(dialogDomElement, onOpen=null) { // Answer a promise that resolves to the action taken
+function openDialog(dialogDomElement, onOpen=null, stack = false) {
+    // Answer a promise that resolves to the action taken
     const dialog = new MDCDialog(dialogDomElement);
+    // If the same dialog intermittently has buttons hidden, stack will fail unless turned off before opening.
+    dialog.autoStackButtons = stack; 
     return new Promise(resolve => {
         const opened = onOpen && (_ => onOpen(dialog)),
               closed = event => {
@@ -223,8 +226,10 @@ async function gatherCredentialWithPassword(ids, {
     function getIconElement(avatar) { return avatar.querySelector('img'); }
     function getNameElement(avatar) { return avatar.querySelector('.mdc-list-item__primary-text'); }
     function getIdElement(avatar) { return avatar.querySelector('.mdc-list-item__secondary-text'); }
-    const passwords = STORE_PASSWORDS && !forcePassword && []
+    const passwords = STORE_PASSWORDS && !forcePassword && [];
     var credential = {}, cleanup;
+
+    // Two cases where we bail early.
     if (!ids.length && !forceDialog) return;
     if ((ids.length === 1) && !forceDialog) { // No need for dialog. Just a snackbar notification.
         const cred = getDb(ids[0]);
@@ -232,24 +237,29 @@ async function gatherCredentialWithPassword(ids, {
         signingInSnackbar.open()
         return cred;
     }
+
+    // Things we can set up before there is a dialog.
     selectUser__context.innerText = label;
+    const accept = selectUser.querySelector('button[data-mdc-dialog-action="yes"]');
+    if (passwords && (ids.length > 1)) {
+        accept.classList.add('hidden');
+    } else {
+        accept.querySelector('.mdc-button__label').innerText = label;
+        accept.disabled = ids.length > 1;
+        accept.classList.remove('hidden');
+    }
+    // Kludge alert:
+    // MDC listen/unlisten doesn't seem to work on this list (see cleanup), so
+    // cons a new one.
+    selectUser__list.innerHTML = '';        
+    const list = selectUser__list.cloneNode(true);
+    selectUser__list.parentNode.replaceChild(list, selectUser__list);
+
     const confirmation = await openDialog(selectUser, dialog => {
         const password = document.importNode(selectUserTemplate.content.lastElementChild, true),
               passwordIndex = ids.length,
               visibility = password.querySelector('button'),
-              input = password.querySelector('input'),
-              accept = selectUser.querySelector('button[data-mdc-dialog-action="yes"]'),
-              // Kludge alert:
-              // MDC listen/unlisten doesn't seem to work on this list (see cleanup), so
-              // cons a new one.
-              list = selectUser__list.cloneNode(true);
-        selectUser__list.parentNode.replaceChild(list, selectUser__list);
-        if (passwords && (ids.length > 1)) {
-            accept.classList.add('hidden');
-        } else {
-            accept.querySelector('.mdc-button__label').innerText = label;
-            accept.disabled = !passwords;
-        }        
+              input = password.querySelector('input');
         function setCredentialFrom(index) {
             const selected = selectUser__list.children[index];
             credential = {
@@ -261,7 +271,6 @@ async function gatherCredentialWithPassword(ids, {
             };
         }
         // Populate the users to select from.
-        selectUser__list.innerHTML = '';
         ids.forEach(id => {
             const data = getDb(id);
             if (!data) return console.warn(`No data for ${id}.`);
