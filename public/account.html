@@ -113,7 +113,7 @@
             <i class="material-icons mdc-list-item__graphic" aria-hidden="true">verified_user</i> <!-- or icon: policy -->
             <span class="mdc-list-item__text">Terms of service</span>
           </a>
-          <a class="mdc-list-item" href="#notImplementedIndependent">
+          <a class="mdc-list-item" href="#privacy">
             <i class="material-icons mdc-list-item__graphic" aria-hidden="true">vpn_lock</i>
             <span class="mdc-list-item__text">Privacy policy</span>
           </a>
@@ -125,7 +125,6 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: forget me</li>
           <li>FIXME: camera processing as in prototype</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
           <li>FIXME: adjust volume</li>
@@ -258,6 +257,35 @@
           <h2 class="mdc-dialog__title" id="not-implement-title">Not Implemented</h2>
           <div class="mdc-dialog__content" id="not-implemented-content">
             The implementation may interact with mechanisms shown here. We'll want to think this through sooner rather than later.
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">OK</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+    <div id="privacy" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="not-implement-title"
+             aria-describedby="not-implemented-content">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title" id="not-implement-title">Privacy</h2>
+          <div class="mdc-dialog__content" id="not-implemented-content">
+            <p>Not implemented yet, except...</p>
+            <p>It is debatable whether a delete-your-account! button (for signed-in users) should be here, or in the user menu. Regardless, the button is real - partly because it interacts with a lot of the semantics of accounts, and partly because it's useful to have during testing.</p>
+            <p>
+              <button id="forgetMe" class="mdc-button mdc-button--raised">
+                <i class="material-icons mdc-button__icon">voice_over_off</i>
+                <span class="mdc-button__label">forget me</span>
+              </button> will delete your account on our servers, and sign you out. (You can re-register later after <i>[period of time, currently zero]</i>.) <b>You will probably also want to tell your browser to forget the information for this site.</b> (We can't do that.) See your browser's documentation for site passwords.
+            </p>
           </div>
           <footer class="mdc-dialog__actions">
             <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">

@@ -34,7 +34,13 @@ function pushDbIfNew(key, value) {
 function getIds() {
     return getDb('ids') || [];
 }
-const dbVersion = 4;
+function storeLocalCredential(credential) {
+    setDbSubkey(credential.id, 'iconURL', credential.iconURL);
+    setDbSubkey(credential.id, 'name', credential.name);
+    pushDbIfNew('ids', credential.id);
+}
+
+const dbVersion = 5;
 if ((getDb('version') || 0) < dbVersion) {
     console.warn('Clearing local db.');
     localStorage.clear();
@@ -86,7 +92,7 @@ function handleSuccessfulLogin(user) {
                 return true;
             }
         }
-        if (noteNew(email, 'id', 'email')) removeDb('id'); // storeCredentials will restore.
+        if (noteNew(email, 'id', 'email')) removeDb(user.id); // storeCredentials will restore.
         noteNew(user.displayName, 'name');
         noteNew(face, 'iconURL', false);
         // We can't make note of a new password, and we don't need to.
@@ -102,9 +108,7 @@ function handleSuccessfulLogin(user) {
 function storeCredentials(options) {
     // We don't get to ask navigator.credentials how many accounts there are, or what their names/icons are,
     // so store them ourselves as well.
-    setDbSubkey(options.id, 'iconURL', options.iconURL);
-    setDbSubkey(options.id, 'name', options.name);
-    pushDbIfNew('ids', options.id);
+    storeLocalCredential(options);
     return setCredential(options);
 }
 function register(options) {
@@ -165,6 +169,23 @@ function logIn() { // case 1, above, followed by handleLoginResults
         .then(passwordLoginIf)
         .catch(e => confirmPassword(id, e))
         .then(handleLoginResult);
+}
+const DELETED_CREDENTIAL_PROPERTY_VALUE = 'deleted';
+async function unregister() {
+    await initialSetUp;
+    const id = isRegistered;
+    if (!id) return console.error('unregister should only be enabled for registered users.');
+    confirmPassword(id).then(credential => {
+        if (!credential) return;
+        service('/delete', credential)
+        // We cannot delete from browser credentials, but we can render them obvious.
+            .then(_ => setCredential({id, password: DELETED_CREDENTIAL_PROPERTY_VALUE,
+                                      name: DELETED_CREDENTIAL_PROPERTY_VALUE}))
+            .then(_ => removeDb(id))
+            .then(_ => setDb('ids', getIds().filter(e => e !== id)))
+            .catch(console.error) // FIXME: do better
+            .then(_ => logOut({preventSilentAccess: true, notify: true}))
+    });
 }
 
 // UI LOGIC
@@ -261,7 +282,7 @@ async function gatherCredentialWithPassword(ids, {
                 'passwords:', passwords, 'label/message:', label, message);
 
     // Two cases where we bail early.
-    if (!ids.length && !forceDialog) return;
+    if (!ids.length) return;
     if ((ids.length === 1) && !forceDialog) { // No need for dialog. Just a snackbar notification.
         const cred = getDb(ids[0]);
         cred.id = signingIn__secondary.innerHTML = ids[0];
@@ -353,10 +374,26 @@ async function gatherCredentialWithPassword(ids, {
 function browserHasPasswordCredentialStore() {
     return 'PasswordCredential' in window;
 }
+function reconcileLocalStorage(credential) {
+    // If a native navigator.credentials produces a credential that isn't in or local storage, add it.
+    // That way it will be available for password confirmation.
+    if (!credential) return;
+    if (!getDb(credential.id)) storeLocalCredential(credential);
+    return credential;
+}
+function filterDeletedCredential(credential) {
+    // Don't allow credentials of accounts that have been deleted by the user.
+    if (!credential) return;
+    if (credential.name === DELETED_CREDENTIAL_PROPERTY_VALUE) return;
+    return credential;
+}
+
 const PREVENT_SILENT_KEY = 'preventSilentAccess';
 async function getCredential(options) {
     if (browserHasPasswordCredentialStore()) {
-        return navigator.credentials.get(options);
+        return navigator.credentials.get(options)
+            .then(filterDeletedCredential)
+            .then(reconcileLocalStorage);
     } // Fake our own.
     if (!options.password || options.mediation !== "optional") {
         return Promise.reject(`Unsupported credential options: ${JSON.stringify(options)}.`);
@@ -411,12 +448,13 @@ function noteChanges(changes) {
 
 function setRegistered(id) {
     isRegistered = id;
+    forgetMe.disabled = !id;
     const disabled = 'mdc-list-item--disabled';
     if (id) {
         body.classList.add('registered');
         registerItem.classList.add(disabled);
         loginItem.classList.add(disabled);        
-        logoutItem.classList.remove(disabled);        
+        logoutItem.classList.remove(disabled);
     } else {
         body.classList.remove('registered');
         registerItem.classList.remove(disabled);
@@ -545,6 +583,7 @@ function gotoHash(x) {
     doDialog('#energy', creditsDialog);
     doDialog('#notImplementedIndependent', notImplementedIndependentDialog);
     doDialog('#notImplementedDependent', notImplementedDependentDialog);
+    doDialog('#privacy', privacyDialog);
     is('#registration') ? openRegistration() : closeRegistration();
     switch (location.hash) {
     case '#energy':
@@ -585,6 +624,7 @@ const topbarTopAppBar = new MDCTopAppBar(topbar);
 const topbarRipple = new MDCRipple(topbar);
 const navigationButonRipple = new MDCRipple(navigationButton);
 const appdrawerDrawer = new MDCDrawer(appdrawer);
+const privacyDialog = new MDCDialog(privacy);
 const notImplementedIndependentDialog = new MDCDialog(notImplementedIndependent);
 const notImplementedDependentDialog = new MDCDialog(notImplementedDependent);
 const creditsDialog = new MDCDialog(credits);
@@ -610,6 +650,7 @@ const signingInSnackbar = new MDCSnackbar(signingIn);
 [
     [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
     [notImplementedDependentDialog, 'MDCDialog:closed', '#notImplementedDependent'],
+    [privacyDialog, 'MDCDialog:closed', '#privacy'],
     [creditsDialog, 'MDCDialog:closed', '#energy'],
     [profileMenu, 'MDCMenuSurface:closed', '#profile']
 ].forEach(([element, event, from, to = '']) => element.listen(event, _ => goIf(from, to)));
@@ -629,6 +670,7 @@ loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
     [passwordVisibility, togglePasswordVisibility],
     [faceCamera, showFaceResult],
     [face, showFaceResult],
+    [forgetMe, unregister],
     [registrationForm, onRegistrationSubmit, 'submit'],
     [buyEnergy, onBuyEnergy, 'submit'],
     [window, gotoHash, 'hashchange']

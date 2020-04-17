@@ -88,6 +88,14 @@ function getUser(email, options) {
     if (!user) return Promise.reject(new Error(`No user for email: ${email}.`));
     return passwordFail(user, options) || Promise.resolve(user);
 }
+function deleteUser(email, options) {
+    return getUser(email, options).then(user => {
+        const userid = fakeDb[email];
+        user.emails.forEach(id => delete fakeDb[id]);
+        delete fakeDb[userid];
+        return {};
+    });
+}
 
 app.use(logger);
 app.use(express.static('public'));
@@ -258,7 +266,6 @@ function promiseResponse(res, promise) {
     return promise
         .catch(e => ({error: e.message || e}))
         .then(data => {
-            console.log('responding with:', data);
             jsonHead(res);
             res.end(JSON.stringify(data));
         });
@@ -275,6 +282,10 @@ app.post('/login', function (req, res) {
                     id
                     ? getUser(id, {auth: password})
                     : Promise.resolve({name: uniqueNamesGenerator(namesConfig)}));
+});
+app.post('/delete', function (req, res) {
+    const {id, password} = req.body;
+    promiseResponse(res, deleteUser(id, {auth: password}));
 });
 
 var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.
