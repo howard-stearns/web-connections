@@ -126,40 +126,56 @@
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
           <li>FIXME: camera processing as in prototype</li>
+          <li>FIXME: strength setting</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
-          <li>FIXME: adjust volume</li>
           <li>FIXME: sample "avatars", to id, give credits, give find-me, must for all(?)</li>
+          <li>internal server db (redis instead of memory that is lost when server shuts down)</li>
         </ul>
       </p>
-      <p>This demo is a real implementation of accounts, <i>except</i>:
-        <ul class="notImplemented">
-          <li>internal server db (redis instead of memory that is lost when server shuts down)
-          <li>internal keys</li>
-          <li>enforce energy consumption (needs keys). The demo is consuming randomly.</li>
-          <li>UI theme</li>
-          <li>unit tests</li>
-          <li>scale internal client db (localStorage is fine for now, but indexDb is better)
-          <li>email service</li>
-          <li>credit card service</li>
-          <li>nofication (with service?) (interacts with add-to-home-screen)</li>
-          <li>right to be forgotten</li>
-          <li>language/localization</li>
-          <li>all the stuff that says "not implemented" when you click it, most of which has some interaction with identity and login</li>
-          <li>move to highfidelity.co? aws?</li>
-          <li>scale up energy and face check</li>
-          <li>no passwordless hardware login (keyfob or touchid)</li>
-        </ul>
-      </p>
-      <p>The purpose is to have real working code to evaluate the underlying technical requirements, as opposed to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
+      <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
         <ul class="implemented">
           <li>Does not require login to start.</li>
           <li>Keeps track of login (but confirms when needed).</li>
           <li>Keep track of account info (email, face) and propogates to other registered machines (upon successful login).</li>
-          <li>Allows multiple users to share a machine (e.g., on desktop).</li>
           <li>Tries softly to get you to register, and if you are, tries to get you to use your login.</li>
+          <li>Allows multiple users to share a machine (e.g., on desktop).</li>
           <li>Always clear who you are (including anonymous), and groups account-related stuff together.</li>
           <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
           <li>It doesn't ask for a credit card until you try to buy something, even during registration.</li>
+        </ul>
+      </p>
+      <p>This demo is a real implementation of accounts, <i>except</i>:
+        <ul class="notImplemented">
+          <li>Scaling:
+            <ul>
+              <li>move to highfidelity.co? aws?</li>
+              <li>scale up energy and face check</li>
+              <li>unit tests</li>
+              <li>scale internal client db (localStorage is fine for now, but indexDb is better)
+            </ul>
+          </li>
+          <li>Security:
+            <ul>
+              <li>internal keys</li>
+              <li>enforce energy consumption (needs keys). The demo is consuming randomly.</li>
+            </ul>
+          </li>
+          <li>Product:
+            <ul>
+              <li>UI theme</li>
+              <li>language/localization</li>
+              <li>all the stuff that says "not implemented" when you click it, some of which has some interaction with identity and login</li>
+              <li>passwordless hardware login (keyfob or touchid). See note about passwords, below.</li>
+            </ul>
+          </li>
+          <li>Operations:
+            <ul>
+              <li>email service</li>
+              <li>hubspot integration</li>              
+              <li>credit card service</li>
+              <li>nofication (with service?) (interacts with add-to-home-screen)</li>
+            </ul>
+          </li>
         </ul>
       </p>
       <!--
