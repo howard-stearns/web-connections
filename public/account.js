@@ -2,7 +2,8 @@
 
 /* This file has the following sections (which could, of course, be split into multiple files).
    APPLICATION LOGIC - independent of the UI
-   UI LOGIC          - references UI elements (e.g., defined by id in the .html)
+   FACE LOGIC        - for face identification
+   UI LOGIC          - references UI elements (e.g., defined by id in the .html), other than that done by Face Logic
    GLOBALS           - UI constants whose initialization would be different with webpack, etc.
    UI INITIALIZATION - MDC object instantiation, and setting event handlers
  */
@@ -45,6 +46,20 @@ if ((getDb('version') || 0) < dbVersion) {
     console.warn('Clearing local db.');
     localStorage.clear();
     setDb('version', dbVersion);
+}
+
+// Gives an alert (but does not current reject) if a promise takes more than timeoutMS to resolve. Also logs execution time.
+function withTimeout(label, promise, timeoutMs = 5000) {
+    const start = Date.now();
+    const timeout = setTimeout(_ => alert(`Could not complete ${label}.`), timeoutMs);
+    return promise.then(result => {
+        clearTimeout(timeout);
+        console.log(label, Date.now() - start);
+        return result;
+    });
+}
+function delay(ms) { // Answer a promise that resolves after the specified ms.
+    return new Promise(resolve => setTimeout(_ => resolve(), ms));
 }
 
 function service(url, data, defaultProperties = {}) {
@@ -187,6 +202,187 @@ async function unregister() {
             .then(_ => logOut({preventSilentAccess: true, notify: true}))
     });
 }
+
+// FACE LOGIC
+
+function speak(text) {
+    var utterThis = new SpeechSynthesisUtterance(text);
+    function onError(event) {
+        alert(`Error while telling you "${text}": ${event.error}`);
+    }
+    utterThis.onerror = onError;
+    utterThis.volume = 1;
+    speechSynthesis.speak(utterThis);
+}
+
+var faceApiLoad = withTimeout('api load', new Promise(resolve => {
+    if (faceapi && faceapi.nets) {
+        resolve();
+    } else {
+        faceApi.onload = _ => resolve();
+    }
+}));
+var models = faceApiLoad.then(_ => withTimeout('load models', Promise.all([
+    //faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
+    faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+    faceapi.nets.faceLandmark68TinyNet.loadFromUri('/models'),
+    faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+    faceapi.nets.faceExpressionNet.loadFromUri('/models')
+]), 10 * 1000));
+
+function webcamSetup() {
+    webcamDialog.open();
+    speak("Let's go.");
+    return withTimeout('webcam access', Promise.all([
+        navigator.mediaDevices.getUserMedia({video: true})
+            .then(stream => new Promise(resolve => {
+                webcamVideo.srcObject = stream;
+                webcamVideo.onloadedmetadata = _ => resolve(stream);
+            }))
+            .catch(e => alert('Unable to access to Webcam!')),
+        models
+    ]), 10 * 1000).then(_ => {
+        models = null; // Won't actually get gc'd while face.api is using it, but we're living clean here.
+        return webcamCapture({ width: webcamVideo.offsetWidth, height: webcamVideo.offsetHeight }, Date.now());
+    });
+}
+
+function webcamStop() {
+    if (webcamVideo.srcObject) {
+        webcamVideo.srcObject.getTracks().forEach(track => track.stop());
+        webcamVideo.srcObject = null;
+        // FIXME: conditionalize on whether we're successful.
+        speak("Thank you. Proof of unique human is complete");
+    }
+    //const snap = captured.toDataURL();
+    if (webcamDialog.isOpen) webcamDialog.close();
+}
+
+function bestFace(detections) { // Return the highest scoring face from dections array.
+    if (detections.length > 1) {
+        review = review.concat(); // copy
+        review.sort((a, b) => Math.sign(b.detection.score - a.detection.score)); // highest score first.
+    }
+    return detections[0];
+}
+
+function findFaces(displaySize) {
+    var groupResult, resizedDetections;
+    return withTimeout('computing face', new Promise(async resolve => {
+        try {
+            groupResult = await faceapi.detectAllFaces(webcamVideo, new faceapi.TinyFaceDetectorOptions({inputSize: 128}))
+                .withFaceLandmarks(true)
+                .withFaceDescriptors()
+                .withFaceExpressions();
+            faceapi.matchDimensions(videoOverlay, displaySize); // Clears overlay, so it has to be done each loop
+            resizedDetections = faceapi.resizeResults(groupResult, displaySize);
+            faceapi.draw.drawDetections(videoOverlay, resizedDetections);
+            faceapi.draw.drawFaceExpressions(videoOverlay, resizedDetections, 0.05);
+        } catch (e) {
+            alert(`Error in computing faces: ${e.message || e}`);
+        }
+        resolve([bestFace(resizedDetections), groupResult]);
+    }));
+}
+
+var lastInstruction = '', gotNeutral = false, gotExpression = false, gotFail = false, descriptor = false;
+var captured;
+async function webcamCapture(displaySize, start) {
+    const [face, raw] = await findFaces(displaySize);
+    const now = Date.now(), TIMEOUT_MS = 2000;
+    var instruction = '';
+    function expired(expires) { return expires && (now > expires); }
+    if (face) {
+        const box = face.detection.box;
+        const margin = 10;
+        if (displaySize.height < displaySize.width
+            ? (box.height < displaySize.height / 2)
+            : (box.width < displaySize.width / 2)) {
+            instruction = "Move closer, please";
+        } else if (box.left < margin) {
+            instruction = "Move left";
+        } else if (box.top < margin) {
+            instruction = "Move down";
+        } else if (box.right > displaySize.width - margin) {
+            instruction = "Move right";
+        } else if (box.bottom > displaySize.height - margin) {
+            instruction = "Move up";
+        } else {
+            const expressions = face.expressions;
+            const MAX_DISTANCE = 0.4;
+            gotFail = false;
+            if (['happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised'].some(x => expressions[x] > 0.9)) {
+                if (!gotExpression) {
+                    var distance = 0;
+                    if (descriptor) {
+                        distance = faceapi.euclideanDistance(face.descriptor, descriptor);
+                        console.info('expression distance:', distance);
+                    } else {
+                        descriptor = face.descriptor;
+                    }
+                    if (distance > MAX_DISTANCE) {
+                        gotFail = now + TIMEOUT_MS;
+                    } else {
+                        gotExpression = now + TIMEOUT_MS;
+                    }
+                }
+            } else if (expressions.neutral > 0.9) {
+                if (!gotNeutral) {
+                    var distance = 0;
+                    if (descriptor) {
+                        distance = faceapi.euclideanDistance(face.descriptor, descriptor);
+                        console.info('neutral distance:', distance);
+                    } else {
+                        descriptor = face.descriptor;
+                    }
+                    if (distance > MAX_DISTANCE) {
+                        gotFail = now + TIMEOUT_MS;
+                    } else {
+                        gotNeutral = now + TIMEOUT_MS;
+                    }
+                }
+                if (!captured) {
+                    const bigBox = bestFace(raw).detection.box;
+                    captured = document.createElement("canvas");
+                    captured.width = bigBox.width;
+                    captured.height = bigBox.height;
+                    captured.getContext('2d').drawImage(webcamVideo,
+                                                        bigBox.left, bigBox.top, captured.width, captured.height,
+                                                        0, 0, captured.width, captured.height);
+                }
+            }
+        }
+    } else if (!gotFail) {
+        gotFail = now + TIMEOUT_MS;
+    }
+    if (expired(gotFail)) {
+        instruction = "Make sure there is enough light, and that you can see your face with a box in the center of the video";
+    }
+    if (instruction || gotFail) {
+        captured = gotNeutral = gotExpression = descriptor = false;
+        if (instruction) gotFail = false;
+    } else if (!gotExpression && expired(gotNeutral)) {
+        instruction = "Please smile, or make a face";
+    } else if (!gotNeutral && expired(gotExpression)) {
+        instruction = "Please have a neutral expression";
+    }
+
+    if (instruction && (instruction != lastInstruction) && !speechSynthesis.pending && !speechSynthesis.speaking) {
+        speak(instruction);
+        lastInstruction = instruction;
+    }
+    if (gotExpression && gotNeutral) {
+        webcamStop();
+        console.log('captured snap is', captured.width, 'x', captured.height);
+        return captured.toDataURL();
+    } else { // Throttled repeat
+        const INTENDED_MAX_INTERVAL_MS = 1000, MIN_MS = 100, elapsed = now - start;
+        console.log(elapsed, instruction, gotExpression, gotNeutral, gotFail);
+        return delay(Math.max(MIN_MS, INTENDED_MAX_INTERVAL_MS - elapsed))
+            .then(_ => webcamCapture(displaySize, now));
+    }
+}
+
 
 // UI LOGIC
 
@@ -523,12 +719,12 @@ function updateFaceResult() {
 function showFaceResult(e) {
     if (e) e.preventDefault();
 
-    if (!face.value && !isRegistered) face.value = new URL("images/profile-1.jpeg", location.href).href;
-    // FIXME: open camera, etc. For now, skipping that and showing a hardcoded result:
-
-    updateFaceResult();
-    face.blur();
-    // FIXME: also put a transparent mask over input to block clicks so that no one messes up the text
+    webcamSetup().then(dataUrl => {
+        face.value = dataUrl;
+        updateFaceResult();
+        // FIXME: also put a transparent mask over input to block clicks so that no one messes up the text
+        face.blur();
+    });
 }
 
 var currentRegistrationDialog;
@@ -628,6 +824,7 @@ const privacyDialog = new MDCDialog(privacy);
 const notImplementedIndependentDialog = new MDCDialog(notImplementedIndependent);
 const notImplementedDependentDialog = new MDCDialog(notImplementedDependent);
 const creditsDialog = new MDCDialog(credits);
+const webcamDialog = new MDCDialog(webcam);
 const profileRipple = new MDCRipple(profile);
 const profileMenu = new MDCMenu(profilemenu);
 
@@ -647,6 +844,9 @@ const loggedOutSnackbar = new MDCSnackbar(loggedOut);
 const changedSnackbar = new MDCSnackbar(changed);
 const signingInSnackbar = new MDCSnackbar(signingIn);
 
+if (!window.speechSynthesis) { alert('This browser does not support speech!'); }
+if (!navigator.mediaDevices) { alert('This browser does not support webcams!'); }
+
 [
     [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
     [notImplementedDependentDialog, 'MDCDialog:closed', '#notImplementedDependent'],
@@ -655,7 +855,7 @@ const signingInSnackbar = new MDCSnackbar(signingIn);
     [profileMenu, 'MDCMenuSurface:closed', '#profile']
 ].forEach(([element, event, from, to = '']) => element.listen(event, _ => goIf(from, to)));
 
-
+webcamDialog.listen('MDCDialog:closed', webcamStop);
 appdrawerDrawer.listen('MDCDrawer:closed', onAppdrawerClosed);
 topbarTopAppBar.listen('MDCTopAppBar:nav', _ => location.hash = 'navigation');
 loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {

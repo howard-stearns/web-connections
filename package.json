@@ -13,7 +13,9 @@
         "node": "10.x"
     },
     "dependencies": {
+        "@tensorflow/tfjs-node": "^1.7.2",
         "body-parser": "^1.19.0",
+        "canvas": "^2.6.1",
         "express": "^4.17.1",
         "express-ws": "^4.0.0",
         "face-api.js": "^0.22.2",

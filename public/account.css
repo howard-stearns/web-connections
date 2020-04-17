@@ -1,3 +1,7 @@
+:root {
+    --security-selfie-width: 300px;
+}
+
 #purposes {
     text-align: center;
 }
@@ -12,10 +16,12 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    object-fit: contain;
 }
 
 #face__image {
     z-index: 10;
+    object-fit: contain;
 }
 
 .list--floating-height .mdc-list-item {
@@ -60,4 +66,24 @@ body:not(.registered) .onlyRegistered {
 }
 .transparent {
     color: transparent !important;
+}
+
+.overlaidMedia {
+    position: relative;
+}
+.overlaidMedia canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 10;
+}
+video {
+    max-width: 100%;
+    height: auto;
+}
+
+@media (min-width: 300px) {
+    video {
+        max-width: 300px;
+    }
 }

@@ -8,9 +8,10 @@
     <link href="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <script src="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.js"></script>
     <link rel="stylesheet" href="account.css">
-  </head>
+    <script src="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.js"></script>
+    <script src="face-api.min.js" id="faceApi"></script>
+    </head>
   <body id="body" class="mdc-typography">
 
     <!-- TOP APP BAR -->
@@ -125,7 +126,8 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: camera processing as in prototype</li>
+          <li>FIXME: compare descriptors at server and give response</li>
+          <li>FIXME: don't send back ALL the faces, emails or any of the descriptors</li>          
           <li>FIXME: strength setting</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
           <li>FIXME: sample "avatars", to id, give credits, give find-me, must for all(?)</li>
@@ -213,7 +215,6 @@
         </div>
         <div class="mdc-snackbar__actions">
           <button type="button" class="mdc-button mdc-snackbar__action">
-            <div class="mdc-button__ripple"></div>
             <span class="mdc-button__label">Sign in</span>
           </button>
         </div>
@@ -227,6 +228,9 @@
              aria-live="polite">
           Signing in as <span id="signingIn__secondary"></span>
         </div>
+        <div class="mdc-snackbar__actions">
+          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
+        </div>
       </div>
     </div>
     <div id="changed" class="mdc-snackbar">
@@ -235,6 +239,9 @@
              role="status"
              aria-live="polite">
           Changed <span id="changed__secondary"></span>.
+        </div>
+        <div class="mdc-snackbar__actions">
+          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
         </div>
       </div>
     </div>
@@ -553,6 +560,33 @@
             </footer>
         </div>
       </form>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+
+    <!-- After registration so drawn on top -->
+    <div id="webcam" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="not-implement-title"
+             aria-describedby="not-implemented-content">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title" id="not-implement-title">Security Selfie - Sound on, please</h2>
+          <div class="mdc-dialog__content">
+            <div class="overlaidMedia">
+              <video id="webcamVideo" autoplay playsinline></video>
+              <canvas id="videoOverlay"></canvas>
+            </div>
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">skip registration</span>
+            </button>
+          </footer>
+        </div>
+      </div>
       <div class="mdc-dialog__scrim"></div>
     </div>
     

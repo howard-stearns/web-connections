@@ -11,6 +11,9 @@ const pkg = require('./package.json');
 const redis = process.env.REDIS_URL && require('redis').createClient(process.env.REDIS_URL);
 const uuidv4  = require('uuid/v4');
 const { uniqueNamesGenerator, adjectives, colors, animals } = require('unique-names-generator');
+const tfjs = require('@tensorflow/tfjs-node'); // Speeds up tensorflow (for face-api)
+const faceapi = require('face-api.js');
+const { Canvas, Image, ImageData, loadImage } = require('canvas');
 
 process.title = "p2p-load-test";
 const app = express();
@@ -18,7 +21,7 @@ const expressWs = require('express-ws')(app);
 app.set('trust proxy', true);
 const logger = morgan('common');
 pseudo.configure(logger);
-
+faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 const namesConfig = {
     dictionaries: [adjectives, colors, animals],
     style: 'capitol'
@@ -48,7 +51,8 @@ function makeTransformer(existingKey) {
 const transformers = {
     email: makeTransformer('emails'),
     oldEmail: _ => {},
-    face: makeTransformer('faces')
+    face: makeTransformer('faces'),
+    descriptor: makeTransformer('descriptors')
 };
 
 function passwordFail(user, options) {
@@ -262,6 +266,25 @@ app.post('/submitFace', function (req, res) {
     });
 });
 
+const models = Promise.all([
+    faceapi.nets.ssdMobilenetv1.loadFromDisk('public/models'),
+    faceapi.nets.faceLandmark68Net.loadFromDisk('public/models'),
+    //faceapi.nets.faceLandmark68TinyNet.loadFromDisk('public/models'),
+    faceapi.nets.faceRecognitionNet.loadFromDisk('public/models')
+    //faceapi.nets.ageGenderNet.loadFromDisk('public/models')
+]);
+
+async function computeDescriptor(url) {
+    const start = Date.now();
+    await models;
+    const captured = await loadImage(url);
+    const final = await faceapi.detectSingleFace(captured)
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+    return [...final.descriptor]; // spread to a normal array
+}
+
+
 function promiseResponse(res, promise) {
     return promise
         .catch(e => ({error: e.message || e}))
@@ -272,9 +295,11 @@ function promiseResponse(res, promise) {
 }
 app.post('/registration', function (req, res) {
     const {id, oldEmail, name, iconURL, password, oldPassword} = req.body;
-    promiseResponse(res,
-                    setUser({email:id, oldEmail, displayName:name, face:iconURL, password},
-                            {auth: oldPassword || password}));
+    computeDescriptor(iconURL).then(descriptor => {
+        promiseResponse(res,
+                        setUser({email:id, oldEmail, displayName:name, face:iconURL, descriptor, password},
+                                {auth: oldPassword || password}));
+    });
 });
 app.post('/login', function (req, res) {
     const {id, password} = req.body;
