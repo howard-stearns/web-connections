@@ -14,6 +14,9 @@ function getDb(key) {
     if (value === undefined) return value;
     return JSON.parse(value);
 }
+function removeDb(key) {
+    localStorage.removeItem(key);
+}
 function setDb(key, value) {
     localStorage.setItem(key, JSON.stringify(value)); // FIXME use indexedDB
 }
@@ -65,17 +68,36 @@ function unregisteredLogin() {
 }
 function passwordLogin({id, password, name, iconURL}) {
     // Get decription key and update keys. Else reject.
-    setRegistered(id);
-    return service('/login', {id, password}, {iconURL, name, id, password});
+    return service('/login', {id, password}, {iconURL, name, id, password})
 }
 function createOrUpdateRegistration(options) { // on server
     return service('/registration', options, options);
 }
-function handleSuccessfulLogin(keysAndSuch) {
-    //console.log('login result', keysAndSuch);
-    if (!keysAndSuch) return Promise.resolve();
+function handleSuccessfulLogin(user) {
+    console.log('login result: FIXME update and merge', user);
+    if (!user) return Promise.resolve();
+    if (user.id) {
+        function last(list) { return list[list.length - 1]; }
+        let changes = [], email = last(user.emails), face = last(user.faces);
+        function noteNew(newValue, key, label = key) {
+            if (user[key] !== newValue) {
+                if (label) changes.push(label);
+                user[key] = newValue;
+                return true;
+            }
+        }
+        if (noteNew(email, 'id', 'email')) removeDb('id'); // storeCredentials will restore.
+        noteNew(user.displayName, 'name');
+        noteNew(face, 'iconURL', false);
+        // We can't make note of a new password, and we don't need to.
+        noteChanges(changes);
+    }
+    setRegistered(user.id); // counting on user.id being falsey for unregistered users
+    setupUser(user);
     setInterval(updateEnergy, 200);
-    return Promise.resolve(setupUser(keysAndSuch)); // FIXME: update keystore if needed
+    // FIXME: update keystore if needed
+    if (!user.id) return user;
+    return storeCredentials(user).then(_ => user);
 }
 function storeCredentials(options) {
     // We don't get to ask navigator.credentials how many accounts there are, or what their names/icons are,
@@ -88,52 +110,61 @@ function storeCredentials(options) {
 function register(options) {
     return createOrUpdateRegistration(options)
         .then(handleSuccessfulLogin)
-        .then(storeCredentials)
         .then(_ => setRegistered(options.id))
         .then(_ => location.hash = '');
 }
-function logOut(notify = false) {
-    return preventSilentCredentialAccess()
-        .then(unregisteredLogin)
+function logOut({preventSilentAccess, notify} = {preventSilentAccess: false, notify: true}) {
+    console.log('logOut: preventSilentAccess =', preventSilentAccess, 'notify =', notify);
+    return unregisteredLogin()
         .then(handleSuccessfulLogin)
         .then(_ => location.hash = '')
-        .then(_ => notify && loggedOutSnackbar.open());
-}
-// Login and promise the result. But if login is rejected,
-// confirm password and repeat until either success or password is dismissed.
-async function tryPasswordLogin(credential) {
-    if (!credential || (credential.type !== 'password')) return;
-    return passwordLogin(credential)
-        .catch(async e => {
-            const cred = await confirmPasswordOfCurrentUser(credential.id, e);
-            if (!cred) return;
-            return tryPasswordLogin(cred);
-        });
-}
-function logIn() {
-    return getCredential({
-        password: true,
-        mediation: "optional"
-    })
-        .then(tryPasswordLogin)
-        .then(cred => cred ? handleSuccessfulLogin(cred) : logOut(true));
+        .then(_ => preventSilentAccess && preventSilentCredentialAccess())
+        .then(_ => notifyLoggedOut(notify));
 }
 
-async function confirmPasswordOfCurrentUser(id, e) {// Answers credential if successful, otherwise falsey
-    if (e) console.error(e);
-    const credential = await gatherCredentialWithPassword([id], {
+// There are two password-based login cycles to cover:
+// 1. Ordinary login, starting with assumed credentials from getCredential 
+//    If supported by the browser, getCredential will do the right thing: ask the user to actively select
+//    a profile (with no password) if explicitly logged out, or if more than one to chose from. Otherwise
+//    just do it and notify.
+// 2. Before updating the user's (server-based) profile, starting with just an id
+//    In this case, we DO want to ask for a password, labeled by a specific profile,
+//    and we do NOT want to pick between profiles (which can happen with getCredential).
+// In either case, we want to process the login results. But if the login fails (in either case), we want to let
+// the password-request repeat (as in (2),) until success, or just ensure logOut if the user gives up.
+function passwordLoginIf(credential) {
+    if (!credential || (credential.type !== 'password')) return Promise.resolve();
+    return passwordLogin(credential);
+}
+function confirmPassword(id, e = null) { // case 2, above
+    if (e) console.warn(e);
+    return gatherCredentialWithPassword([id], {
         forcePassword: true,
         forceDialog: true,
         label: "Confirm",
         message: e && e.message
-    });
-    if (!credential) return; // dismissed
-    try {
-        await passwordLogin(credential);
-    } catch (e) {
-        return confirmPasswordOfCurrentUser(id, e);
-    }
-    return credential;
+    })
+        .then(passwordLoginIf)
+        .catch(e => confirmPassword(id, e))
+}
+function handleLoginResult(result, notify = false) {
+    console.log('handleLoginResult', result, notify);
+    if (result) return handleSuccessfulLogin(result);
+    return logOut({preventSilentAccess: false, notify: notify});
+}
+function logIn() { // case 1, above, followed by handleLoginResults
+    var id;
+    return getCredential({
+        password: true,
+        mediation: "optional"
+    })
+        .then(credential => {
+            id = credential && credential.id;
+            return credential;
+        })
+        .then(passwordLoginIf)
+        .catch(e => confirmPassword(id, e))
+        .then(handleLoginResult);
 }
 
 // UI LOGIC
@@ -217,16 +248,17 @@ const STORE_PASSWORDS = !location.search.includes('store-passwords=false');
 async function gatherCredentialWithPassword(ids, {
     forcePassword = false,
     forceDialog = forcePassword,
-    //forceConfirmation = false,
     label = "Sign in",
     message = ''}) {
     // FIXME: display message, if any (e.g., that the password entered was wrong)
-    console.log('gatherCredentialsWithPasswords', ids, forceDialog, forcePassword, label, message);
     function getIconElement(avatar) { return avatar.querySelector('img'); }
     function getNameElement(avatar) { return avatar.querySelector('.mdc-list-item__primary-text'); }
     function getIdElement(avatar) { return avatar.querySelector('.mdc-list-item__secondary-text'); }
     const passwords = STORE_PASSWORDS && !forcePassword && [];
+    if (!passwords && ids.length) forceDialog = true;
     var credential = {}, cleanup;
+    console.log('gatherCredentialsWithPasswords', ids, 'dialog:', forceDialog, 'password:', forcePassword,
+                'passwords:', passwords, 'label/message:', label, message);
 
     // Two cases where we bail early.
     if (!ids.length && !forceDialog) return;
@@ -291,7 +323,7 @@ async function gatherCredentialWithPassword(ids, {
         if (forceDialog && !nCredentials) {
             console.warn("No data for selecting credentials.");
             dialog.close();
-            logOut(true);
+            logOut({preventSilentAccess: false, notify: true});
         } else if (nCredentials === 1) {
             setCredentialFrom(0);
         }
@@ -365,6 +397,17 @@ function preventSilentCredentialAccess() {
     return Promise.resolve();
 }
 
+function notifyLoggedOut(notify) {
+    if (!notify) return;
+    loggedOutSnackbar.open();
+}
+function noteChanges(changes) {
+    if (!changes.length) return;
+    changed__secondary.innerText = (changes.length > 1)
+        ? changes.slice(0, -1).join(', ') + ' and ' + changes[changes.length - 1]
+        : changes[0];
+    changedSnackbar.open();
+}
 
 function setRegistered(id) {
     isRegistered = id;
@@ -456,9 +499,9 @@ async function openRegistration() {
     var credential = {};
     await initialSetUp;
     if (isRegistered) {
-        credential = await confirmPasswordOfCurrentUser(isRegistered);
+        credential = await confirmPassword(isRegistered).then(handleLoginResult);
     }
-    if (!credential) return logOut(true);
+    if (!credential) return;
     openDialog(registration, dialog => {
         face.value = credential.iconURL || '';
         displayName.value = credential.name || '';
@@ -512,7 +555,7 @@ function gotoHash(x) {
         location.hash = '';
         break;
     case '#logout':
-        logOut();
+        logOut({preventSilentAccess: true, notify: false});
         break;
     }
 }
@@ -561,6 +604,7 @@ const purchaseAmountFloatingLabel = new MDCFloatingLabel(purchaseAmount__floatin
 const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 
 const loggedOutSnackbar = new MDCSnackbar(loggedOut);
+const changedSnackbar = new MDCSnackbar(changed);
 const signingInSnackbar = new MDCSnackbar(signingIn);
 
 [

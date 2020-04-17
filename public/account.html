@@ -125,7 +125,6 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: when you change personal data, it has to propogate to other machines</li>
           <li>FIXME: forget me</li>
           <li>FIXME: camera processing as in prototype</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
@@ -211,8 +210,16 @@
         <div class="mdc-snackbar__label"
              role="status"
              aria-live="polite">
-          Signing in as
-          <span id="signingIn__secondary" class="mdc-list-item__secondary-text"></span>
+          Signing in as <span id="signingIn__secondary"></span>
+        </div>
+      </div>
+    </div>
+    <div id="changed" class="mdc-snackbar">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             role="status"
+             aria-live="polite">
+          Changed <span id="changed__secondary"></span>.
         </div>
       </div>
     </div>
