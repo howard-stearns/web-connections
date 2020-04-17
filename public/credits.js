@@ -1,3 +1,5 @@
+'use strict';
+
 const MDCRipple = mdc.ripple.MDCRipple;
 const MDCDialog = mdc.dialog.MDCDialog;
 
