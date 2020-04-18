@@ -82,8 +82,8 @@ function elide(string, nchars = 5) {
     if (string.length <= nchars) return string;
     return string.slice(0, nchars) + '...';
 }
-function elideParts(email, separator = '@') {
-    return email.split(separator).map(elide).join(separator);
+function elideParts(email, separator = '@', nchars = 5) {
+    return email.split(separator).map(s => elide(s, nchars)).join(separator);
 }
 function matchesOtherFaceFail(userid, options) {
     if (!options.descriptor) return;

@@ -41,9 +41,22 @@ function storeLocalCredential(credential) {
     pushDbIfNew('ids', credential.id);
 }
 
+// The PasswordCredential API is not implemented in Safari or Firefox yet.
+// This uses the API when available, otherwise we recreate the same API, with similar UI.
+function browserHasPasswordCredentialStore() {
+    return 'PasswordCredential' in window;
+}
+const DELETED_CREDENTIAL_PROPERTY_VALUE = 'deleted';
+function deleteCredential(id) {
+    setCredential({id, password: DELETED_CREDENTIAL_PROPERTY_VALUE,
+                   name: DELETED_CREDENTIAL_PROPERTY_VALUE});
+}
 const dbVersion = 5;
 if ((getDb('version') || 0) < dbVersion) {
     console.warn('Clearing local db.');
+    if (browserHasPasswordCredentialStore()) {
+        getIds().forEach(deleteCredential);
+    }
     localStorage.clear();
     setDb('version', dbVersion);
 }
@@ -185,7 +198,6 @@ function logIn() { // case 1, above, followed by handleLoginResults
         .catch(e => confirmPassword(id, e))
         .then(handleLoginResult);
 }
-const DELETED_CREDENTIAL_PROPERTY_VALUE = 'deleted';
 async function unregister() {
     await initialSetUp;
     const id = isRegistered;
@@ -194,8 +206,7 @@ async function unregister() {
         if (!credential) return;
         service('/delete', credential)
         // We cannot delete from browser credentials, but we can render them obvious.
-            .then(_ => setCredential({id, password: DELETED_CREDENTIAL_PROPERTY_VALUE,
-                                      name: DELETED_CREDENTIAL_PROPERTY_VALUE}))
+            .then(_ => deleteCredential(id))
             .then(_ => removeDb(id))
             .then(_ => setDb('ids', getIds().filter(e => e !== id)))
             .catch(console.error)
@@ -248,11 +259,11 @@ function webcamSetup() {
     });
 }
 
-function webcamStop() {
+function webcamStop(wasAbandoned) {
     if (webcamVideo.srcObject) {
         webcamVideo.srcObject.getTracks().forEach(track => track.stop());
         webcamVideo.srcObject = null;
-        speak("Thank you. Data for proof of unique human is complete");
+        if (!wasAbandoned) speak("Thank you. Data for proof of unique human is complete");
     }
     if (webcamDialog.isOpen) webcamDialog.close();
 }
@@ -371,9 +382,11 @@ async function webcamCapture(displaySize, start) {
         lastInstruction = instruction;
     }
     if (gotExpression && gotNeutral) {
-        webcamStop();
+        webcamStop(false);
         console.log('captured snap is', captured.width, 'x', captured.height);
         return captured.toDataURL();
+    } else if (!webcamDialog.isOpen) {
+        return '';
     } else { // Throttled repeat
         const INTENDED_MAX_INTERVAL_MS = 1000, MIN_MS = 100, elapsed = now - start;
         console.log(elapsed, instruction, gotExpression, gotNeutral, gotFail);
@@ -564,11 +577,6 @@ async function gatherCredentialWithPassword(ids, {
     return credential;
 }
 
-// The PasswordCredential API is not implemented in Safari or Firefox yet.
-// This uses the API when available, otherwise we recreate the same API, with similar UI.
-function browserHasPasswordCredentialStore() {
-    return 'PasswordCredential' in window;
-}
 function reconcileLocalStorage(credential) {
     // If a native navigator.credentials produces a credential that isn't in or local storage, add it.
     // That way it will be available for password confirmation.
@@ -728,8 +736,10 @@ function showFaceResult(e) {
     if (e) e.preventDefault();
 
     webcamSetup().then(dataUrl => {
-        face.value = dataUrl;
-        updateFaceResult();
+        if (dataUrl) {
+            face.value = dataUrl; // FIXME: in cleanup, pass this to updateFaceResult and have it do it. (But needs testing.)
+            updateFaceResult();
+        }
         // FIXME: also put a transparent mask over input to block clicks so that no one messes up the text
         face.blur();
     });
@@ -752,11 +762,7 @@ async function openRegistration() {
         register__submit.value = isRegistered ? "Update" : "Register";
         const fields = instantiateFields(registration);
         const lists = instantiateAndLayoutLists(registration);
-        if (face.value) {
-            showFaceResult();
-        } else {
-            updateFaceResult();
-        }
+        updateFaceResult();
         currentRegistrationDialog = dialog;
         dialog.listen('MDCDialog:closed', _ => {
             currentRegistrationDialog = null;

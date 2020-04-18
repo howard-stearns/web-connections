@@ -126,8 +126,6 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: do not open face dialog without clicking in it. (It re-opens when there is data, and then shows the text instead of the image.)</li>
-          <li>FIXME: when cleaning "db", "delete" the store.</li>
           <li>FIXME: make sure we work when you don't save anything in browser</li>
           <li>FIXME: strength setting</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
@@ -137,10 +135,11 @@
       <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
         <ul class="implemented">
           <li>Does not require login to start.</li>
-          <li>Keeps track of login (but confirms when needed).</li>
-          <li>Keep track of account info (email, face) and propogates to other registered machines (upon successful login).</li>
-          <li>Tries softly to get you to register, and if you are, tries to get you to use your login.</li>
-          <li>Allows multiple users to share a machine (e.g., on desktop).</li>
+          <li>You don't register just once, but on each device.</li>
+          <li>That's because it keeps track on the machine so you don't have to sign in all the time, but confirms when needed. (The model semantics for this is per a W3C draft standard.)</li>
+          <li>Tries softly to get you to register, and if you are, tries to get you to use your account, but you <i>can</i> be anonymous.</li>
+          <li>Propogates the info to other registered machines upon successful sign in.</li>
+          <li>Although discouraged, it does allow multiple users to share a machine.</li>
           <li>Always clear who you are (including anonymous), and groups account-related stuff together.</li>
           <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
           <li>It doesn't ask for a credit card until you try to buy something, even during registration.</li>
@@ -154,7 +153,8 @@
               <li>move to highfidelity.co? aws?</li>
               <li>scale up energy and face check</li>
               <li>unit tests</li>
-              <li>scale internal client db (localStorage is fine for now, but indexDb is better)
+              <li>scale internal client db (localStorage is fine for now, but indexDb is better)</li>
+              <li>code cleanup</li>
             </ul>
           </li>
           <li>Security:
