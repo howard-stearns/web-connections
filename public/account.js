@@ -95,7 +95,6 @@ function createOrUpdateRegistration(options) { // on server
     return service('/registration', options, options);
 }
 function handleSuccessfulLogin(user) {
-    console.log('login result: FIXME update and merge', user);
     if (!user) return Promise.resolve();
     if (user.id) {
         function last(list) { return list[list.length - 1]; }
@@ -127,6 +126,7 @@ function storeCredentials(options) {
     return setCredential(options);
 }
 function register(options) {
+    // FIXME: don't submit what has not actually changed.
     return createOrUpdateRegistration(options)
         .then(handleSuccessfulLogin)
         .then(_ => setRegistered(options.id))
@@ -198,7 +198,7 @@ async function unregister() {
                                       name: DELETED_CREDENTIAL_PROPERTY_VALUE}))
             .then(_ => removeDb(id))
             .then(_ => setDb('ids', getIds().filter(e => e !== id)))
-            .catch(console.error) // FIXME: do better
+            .catch(console.error)
             .then(_ => logOut({preventSilentAccess: true, notify: true}))
     });
 }
@@ -231,6 +231,7 @@ var models = faceApiLoad.then(_ => withTimeout('load models', Promise.all([
 ]), 10 * 1000));
 
 function webcamSetup() {
+    videoOverlay.getContext('2d').clearRect(0, 0, videoOverlay.width, videoOverlay.height);
     webcamDialog.open();
     speak("Let's go.");
     return withTimeout('webcam access', Promise.all([
@@ -251,10 +252,8 @@ function webcamStop() {
     if (webcamVideo.srcObject) {
         webcamVideo.srcObject.getTracks().forEach(track => track.stop());
         webcamVideo.srcObject = null;
-        // FIXME: conditionalize on whether we're successful.
-        speak("Thank you. Proof of unique human is complete");
+        speak("Thank you. Data for proof of unique human is complete");
     }
-    //const snap = captured.toDataURL();
     if (webcamDialog.isOpen) webcamDialog.close();
 }
 
@@ -689,6 +688,15 @@ function onRegistrationSubmit(e) {
         name: displayName.value,
         iconURL: face.value,
         password: password.value
+    }).catch(e => {
+        const message = e.message || e;
+        registrationFail__secondary.innerText = message;
+        registrationFailSnackbar.open();
+        if (message.includes('email')) {
+            email.focus();
+        } else if (message.includes('selfie') || message.includes('face')) {
+            showFaceResult();
+        }
     });
 }
 function onBuyEnergy(e) {
@@ -843,6 +851,7 @@ const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 const loggedOutSnackbar = new MDCSnackbar(loggedOut);
 const changedSnackbar = new MDCSnackbar(changed);
 const signingInSnackbar = new MDCSnackbar(signingIn);
+const registrationFailSnackbar = new MDCSnackbar(registrationFail);
 
 if (!window.speechSynthesis) { alert('This browser does not support speech!'); }
 if (!navigator.mediaDevices) { alert('This browser does not support webcams!'); }

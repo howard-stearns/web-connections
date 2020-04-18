@@ -126,12 +126,12 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: compare descriptors at server and give response</li>
-          <li>FIXME: don't send back ALL the faces, emails or any of the descriptors</li>          
+          <li>FIXME: do not open face dialog without clicking in it. (It re-opens when there is data, and then shows the text instead of the image.)</li>
+          <li>FIXME: when cleaning "db", "delete" the store.</li>
+          <li>FIXME: make sure we work when you don't save anything in browser</li>
           <li>FIXME: strength setting</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
           <li>FIXME: sample "avatars", to id, give credits, give find-me, must for all(?)</li>
-          <li>internal server db (redis instead of memory that is lost when server shuts down)</li>
         </ul>
       </p>
       <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
@@ -150,6 +150,7 @@
         <ul class="notImplemented">
           <li>Scaling:
             <ul>
+              <li>internal server db (redis instead of in-memory that is lost when server shuts down)</li>
               <li>move to highfidelity.co? aws?</li>
               <li>scale up energy and face check</li>
               <li>unit tests</li>
@@ -160,6 +161,7 @@
             <ul>
               <li>internal keys</li>
               <li>enforce energy consumption (needs keys). The demo is consuming randomly.</li>
+              <li>use hashed passwords on server, not raw. (Current is for debugging.)</li>
             </ul>
           </li>
           <li>Product:
@@ -172,6 +174,7 @@
           </li>
           <li>Operations:
             <ul>
+              <li>failure tracking</li>
               <li>email service</li>
               <li>hubspot integration</li>              
               <li>credit card service</li>
@@ -239,6 +242,18 @@
              role="status"
              aria-live="polite">
           Changed <span id="changed__secondary"></span>.
+        </div>
+        <div class="mdc-snackbar__actions">
+          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="registrationFail" class="mdc-snackbar mdc-snackbar--stacked">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             role="status"
+             aria-live="polite">
+          <span id="registrationFail__secondary"></span>
         </div>
         <div class="mdc-snackbar__actions">
           <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>

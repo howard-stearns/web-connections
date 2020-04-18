@@ -34,6 +34,11 @@ In database:
 userid => {displayName, passwordHash, emails, faces, keypairs}
 email1 => userid; email2 => userid; ...
 */
+function trimUser(user) { // What gets returned to user. FIXME: determine the minimum needed.
+    const cred = Object.assign({}, user);
+    cred.faces = cred.faces.slice(-1);
+    return cred;
+}
 
 // FIXME: this first go is in-memory, not redis
 const fakeDb = {};
@@ -51,34 +56,83 @@ function makeTransformer(existingKey) {
 const transformers = {
     email: makeTransformer('emails'),
     oldEmail: _ => {},
-    face: makeTransformer('faces'),
-    descriptor: makeTransformer('descriptors')
+    face: makeTransformer('faces')
 };
 
 function passwordFail(user, options) {
     // Subtle: 'auth' in options is true if password is supplied at all, even as undefined.
     if (('auth' in options) && (user.password !== options.auth)) {
+        // FIXME message?
         return Promise.reject(new Error("Password does not match."));
     }
 }
-
-function setUser(data, options) {
-    var emailKey = data.oldEmail || data.email;
-    var userid = fakeDb[emailKey];
-    if (!userid) {
-        userid = uuidv4();
-        fakeDb[emailKey] = userid;
+function mismatchedFaceFail(user, options) {
+    // Fails if given an empty options.descriptor. OK if not asked to check descriptor.
+    if (!('descriptor' in options)) return;
+    // FIXME message?
+    if (!options.descriptor) return Promise.reject(new Error("Security selfie is not clear."));
+    if (user.meanDescriptor) {
+        const meanDifference = descriptorDistance(user.meanDescriptor, options.descriptor);
+        pseudo.info({url: `/interUser?distance=${Math.round(meanDifference * 100)}`});
+        // FIXME message?
+        if (meanDifference > 0.52) return Promise.reject(new Error(`Your face is wrong. ${meanDifference.toFixed(2)} from previous registration. And you're old.`));
     }
-    if (data.oldEmail && data.email && !fakeDb[data.email]) {
-        fakeDb[data.email] = userid;
+}
+function elide(string, nchars = 5) {
+    if (string.length <= nchars) return string;
+    return string.slice(0, nchars) + '...';
+}
+function elideParts(email, separator = '@') {
+    return email.split(separator).map(elide).join(separator);
+}
+function matchesOtherFaceFail(userid, options) {
+    if (!options.descriptor) return;
+    for (const uid of fakeDb['ids']) {
+        const user = fakeDb[uid];
+        if (!user || !user.meanDescriptor || uid === userid) continue;
+        const difference = descriptorDistance(options.descriptor, user.meanDescriptor);
+        const id = user.emails[user.emails.length - 1];
+        pseudo.info({url: `/intraUser?distance=${Math.round(difference * 100)}&id=${id}`});
+        // FIXME message?
+        if (difference < 0.53)
+            return Promise.reject(new Error(`Your face is already registered under another email. ${difference.toFixed(2)} from ${elideParts(id)}.`));
+    }
+}
+function updateMeanDescriptor(user, options) {
+    if (!options.descriptor) return;
+    const mean = Array(128).fill(0);
+    const descriptors = user.descriptors ? user.descriptors.concat() : [];
+    descriptors.push(options.descriptor)
+    descriptors.forEach(d => d.forEach((v, i) => mean[i] += v));
+    mean.forEach((v, i) => mean[i] /= descriptors.length);
+    user.meanDescriptor = mean;
+}
+
+fakeDb['ids'] = [];
+function setUser(data, options) {
+    const emailPointersToUpdate = [];
+    const emailKey = data.oldEmail || data.email;
+    var userid = fakeDb[emailKey];
+    if (!userid) {  // Add pointer from email.
+        userid = uuidv4();
+        emailPointersToUpdate.push(emailKey);
+    }
+    if (data.oldEmail && data.email && !fakeDb[data.email]) { // Add additonal pointer if email changed.
+        emailPointersToUpdate.push(data.email);
     }
     var user = fakeDb[userid];
     if (user) {
-        const fail = passwordFail(user, options);
+        const fail = passwordFail(user, options) || mismatchedFaceFail(user, options)
         if (fail) return fail;
     } else {
+        const altEgoFail = matchesOtherFaceFail(user, options);
+        if (altEgoFail) return altEgoFail;
         user = fakeDb[userid] = {};
     }
+    // Can't be done before security checks, else people could steal addresses.
+    if (!fakeDb['ids'].includes(userid)) fakeDb['ids'].push(userid);
+    emailPointersToUpdate.forEach(key => fakeDb[key] = userid);
+    updateMeanDescriptor(user, options);
     Object.keys(data).forEach(key => {
         const f = transformers[key] || ((entry, existing) => existing[key] = entry);
         f(data[key], user);
@@ -97,9 +151,12 @@ function deleteUser(email, options) {
         const userid = fakeDb[email];
         user.emails.forEach(id => delete fakeDb[id]);
         delete fakeDb[userid];
+        const ids = fakeDb['ids'];
+        ids.splice(ids.indexOf(userid), 1);
         return {};
     });
 }
+
 
 app.use(logger);
 app.use(express.static('public'));
@@ -281,13 +338,21 @@ async function computeDescriptor(url) {
     const final = await faceapi.detectSingleFace(captured)
           .withFaceLandmarks()
           .withFaceDescriptor();
+    if (!final) {
+        pseudo.info({url: `/failedComputeDescriptor?bytes=${url.length}`});
+        // FIXME message?
+        return Promise.reject(new Error("Security selfie is not clear."));
+    }
     return [...final.descriptor]; // spread to a normal array
 }
 
 
 function promiseResponse(res, promise) {
     return promise
-        .catch(e => ({error: e.message || e}))
+        .catch(e => {
+            console.debug(e); // FIXME: remove
+            return {error: e.message || e};
+        })
         .then(data => {
             jsonHead(res);
             res.end(JSON.stringify(data));
@@ -295,17 +360,18 @@ function promiseResponse(res, promise) {
 }
 app.post('/registration', function (req, res) {
     const {id, oldEmail, name, iconURL, password, oldPassword} = req.body;
-    computeDescriptor(iconURL).then(descriptor => {
-        promiseResponse(res,
-                        setUser({email:id, oldEmail, displayName:name, face:iconURL, descriptor, password},
-                                {auth: oldPassword || password}));
-    });
+    promiseResponse(res,
+                    computeDescriptor(iconURL).then(descriptor => {
+                        return setUser({email:id, oldEmail, displayName:name, face:iconURL, password},
+                                       {auth: oldPassword || password, descriptor: descriptor})
+                            .then(trimUser);
+                    }));
 });
 app.post('/login', function (req, res) {
     const {id, password} = req.body;
     promiseResponse(res,
                     id
-                    ? getUser(id, {auth: password})
+                    ? getUser(id, {auth: password}).then(trimUser)
                     : Promise.resolve({name: uniqueNamesGenerator(namesConfig)}));
 });
 app.post('/delete', function (req, res) {
