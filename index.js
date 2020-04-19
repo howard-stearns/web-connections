@@ -94,7 +94,7 @@ function matchesOtherFaceFail(userid, options) {
         const id = user.emails[user.emails.length - 1];
         pseudo.info({url: `/intraUser?distance=${Math.round(difference * 100)}&id=${id}`});
         // FIXME message?
-        if (difference < 0.53)
+        if (difference < 0.50)
             return Promise.reject(new Error(`Your face is already registered under another email. ${difference.toFixed(2)} from ${elideParts(id)}.`));
     }
 }

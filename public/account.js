@@ -191,6 +191,7 @@ function logIn() { // case 1, above, followed by handleLoginResults
         mediation: "optional"
     })
         .then(credential => {
+            console.log('fixme credential:', credential);
             id = credential && credential.id;
             return credential;
         })
@@ -432,7 +433,8 @@ function instantiateDescendents(ancestor, selector, constructor) {
 function instantiateFields(ancestor) {
     instantiateDescendents(ancestor, '.mdc-text-field', MDCTextField),
     instantiateDescendents(ancestor, '.mdc-notched-outine', MDCNotchedOutline),
-    instantiateDescendents(ancestor, '.mdc-floating-label', MDCFloatingLabel)
+    instantiateDescendents(ancestor, '.mdc-floating-label', MDCFloatingLabel),
+    instantiateDescendents(ancestor, '.mdc-text-field-helper-text', MDCTextFieldHelperText)
 }
 function instantiateAndLayoutLists(ancestor) {
     mapSelectedElements(ancestor, '.mdc-list', e => {
@@ -580,7 +582,33 @@ async function gatherCredentialWithPassword(ids, {
 function reconcileLocalStorage(credential) {
     // If a native navigator.credentials produces a credential that isn't in or local storage, add it.
     // That way it will be available for password confirmation.
-    if (!credential) return;
+    if (!credential) {
+        // Kludge alert:
+        // It is possible that a security-consious user has opted out of the use of the browser's account storage,
+        // and there's no way for us to know the difference between this vs simply not choosing from among multiple browser accounts!
+        // But we can make a GUESS by comparing with our db:
+        const ids = getIds();
+        console.log('reconcileLocalStorage, ids:', ids);
+        // A security-consious user would not share a browser with other users, so if there is EXACTLY one stored in our db,
+        // it could be because the user opted out. Furthermore, if the user had not opted out (declined from multiple browser-stored
+        // choices), there ids.length would be more than 1. Finally, note that the browser-storage will not give the user
+        // a chance to decline if there's just one. So we KNOW that in this case, the user has opted out all along.
+        //
+        // I don't think this is the right thing for someone who has screwed things up by creating multiple registrations
+        // in the same OS account, and yet opting out of the browser storage. Fortunately, our face id will prevent
+        // people from accidentally doing that, so the failure case is a really twisted special special case that we simply don't support.
+        if (ids.length === 1) {
+            const cred = getDb(ids[0]);
+            if (!cred) {
+                console.warn(`Inconsistent db. No data for ${ids[0]}.`);
+                return;
+            }
+            cred.id = ids[0];
+            cred.type = 'password';
+            return cred;
+        }
+        return;
+    }
     if (!getDb(credential.id)) storeLocalCredential(credential);
     return credential;
 }
@@ -651,7 +679,7 @@ function noteChanges(changes) {
 
 function setRegistered(id) {
     isRegistered = id;
-    forgetMe.disabled = !id;
+    buyEnergy__fieldset.disabled = forgetMe.disabled = !id;
     const disabled = 'mdc-list-item--disabled';
     if (id) {
         body.classList.add('registered');
@@ -886,6 +914,7 @@ loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
     [faceCamera, showFaceResult],
     [face, showFaceResult],
     [forgetMe, unregister],
+    [buyEnergy__list, _ => {!isRegistered && (location.hash = 'registration');}],
     [registrationForm, onRegistrationSubmit, 'submit'],
     [buyEnergy, onBuyEnergy, 'submit'],
     [window, gotoHash, 'hashchange']

@@ -126,7 +126,6 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
         <ul class="notImplemented">
-          <li>FIXME: make sure we work when you don't save anything in browser</li>
           <li>FIXME: strength setting</li>
           <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
           <li>FIXME: sample "avatars", to id, give credits, give find-me, must for all(?)</li>
@@ -137,12 +136,11 @@
           <li>Does not require login to start.</li>
           <li>You don't register just once, but on each device.</li>
           <li>That's because it keeps track on the machine so you don't have to sign in all the time, but confirms when needed. (The model semantics for this is per a W3C draft standard.)</li>
-          <li>Tries softly to get you to register, and if you are, tries to get you to use your account, but you <i>can</i> be anonymous.</li>
-          <li>Propogates the info to other registered machines upon successful sign in.</li>
-          <li>Although discouraged, it does allow multiple users to share a machine.</li>
-          <li>Always clear who you are (including anonymous), and groups account-related stuff together.</li>
+          <li>Tries softly to get you to register, and if you are registered, tries to get you to use your account, but you <i>can</i> be anonymous.</li>
+          <li>Always clear who you are (anonymous or otherwise), and groups account-related stuff together.</li>
           <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
           <li>It doesn't ask for a credit card until you try to buy something, even during registration.</li>
+          <li>In this implementation I have tried (and I think <i>mostly</i> succeeded,) to support two distinct users within the same browser. Having done that, I think it is a profoundly bad idea for privacy, user experience, and implementation complexity. Instead, I now recommend that if two different people want to register on the "same" browser, they should use two different operating-system-level accounts. E.g., they should switch-user in Windows or OSX, rather than switching <i>Big World</i> users. This would also have the side benefit of reinforcing the idea that people should not create multiple accounts.</li>
         </ul>
       </p>
       <p>This demo is a real implementation of accounts, <i>except</i>:
@@ -167,9 +165,10 @@
           <li>Product:
             <ul>
               <li>UI theme</li>
-              <li>language/localization</li>
               <li>all the stuff that says "not implemented" when you click it, some of which has some interaction with identity and login</li>
-              <li>passwordless hardware login (keyfob or touchid). See note about passwords, below.</li>
+              <li>language/localization</li>
+              <li>accessibility. MDC has a bunch of support for Aria, but I skipped it for now. I <i>think</i> that all the stuff shown can be screen-reader accessible. (I'm also guessing that Apple or whomever comes up with a working "google glass" form-factor is going to lean on Aria or something like it.)</li>
+              <li>passwordless hardware login (keyfob or touchid), and/or "sign in with Apple". See note about passwords, below.</li>
             </ul>
           </li>
           <li>Operations:
@@ -203,7 +202,9 @@
               <li>No one has such devices. E.g., an iPhone doesn't count!</li>
               <li>I'd like to implement it anyway, but it is a <i>lot</i> of fiddly code. So I figured I'd wait until everything else gets ironed out the way we want it to be.</li>
             </ol>
-          <li>There is also a W3C browser API for working with "federated credentials" from third-party providers like Google or Facebook. The model here is compatible with the use of this API, but I didn't bother to do so, because I figured that if we're so serious about privacy that we don't want to segment users or track their user experience, we certainly don't want Facebook and Google doing so!</li>
+          <li>There is also a W3C browser API for working with "federated credentials" from third-party providers like Google or Facebook. The model here is compatible with the use of this API, but I didn't bother to do so, because I figured that if we're so serious about privacy that we don't want to segment users or track their user experience, we certainly don't want Facebook and Google doing so!
+            <p>It looks like "sign in with Apple" is a hybrid of both federated credentials and hardware keys, that appears to be secure and, if you believe Apple, private as well. From a technical and first-princples viewpoint, I <i>think</i> it would make sense to support that. However, if we do so, I am certain that some users will say, "You support sign in with Apple, I demand that you support sign in with Facebook/Twitter/Google/etc. At that point, we will have crippled our own ability to analyze failure behavior, and instead given it away to third parties. (cf <a href="https://scholarlycommons.law.northwestern.edu/cgi/viewcontent.cgi?article=1157&context=nulr" target="_blank">economic "unraveling"</a></p>
+          </li>
           <li>So, that leaves passwords. There's a W3C browser API for managing that in a sensible way, which I've used where it exists. Alas, it doesn't exist on Firefox or Safari yet, so I've simulated it myself. This is what you see in the demo on these browsers. <i>However...</i> to do, I've stored the user's password in site-specific storage in the browser, rather than in the non-existent password credential manager. Is anyone going to freak about that? The alternative is to not save the password in my storage, but instead make the user enter the password each time in a form, which will be autofilled from the browser anyway. I've implemented that, too, so that you can compare. Go to <a href="https://web-connections.herokuapp.com/account.html?store-passwords=false">/account.html?store-passwords=false</a> to try out that version.</li>
         </ol>
       </p>
@@ -403,49 +404,46 @@
             <p>Your energy level is shown by the solid white bar at top of the page. For example, your current level is <span id="energyAmount"></span>%.</p>
             <p>Your rate of energy consumption is shown by the moving green bar.</p>
             <p>Registered users have their energy replenished automatically. Registered users can also earn extra energy for free by contributing their <a href="https://web-connections.herokuapp.com/credits.html">idle computers</a>, or simply buy extra energy with a credit card.</p>
-            <p class="onlyUnregistered">To get more energy, you must register (for free).</p>
+            <p class="onlyUnregistered">To get more energy, you must <a href="#registration">register</a> (for free).</p>
 
-              <div class="form-group mdc-elevation--z20">
-                <ul id="buyEnergy__list" class="mdc-list mdc-list--non-interactive list--floating-height">
-                  <li class="mdc-list-item">
-                    <div class="mdc-typography mdc-typography--body2">
-                      Energy credits can be purchased for 100 units per $1.00. <i>FIXME: How should we display a balance more than 100% on the energy bar?</i>
-                    </div>
-                  </li>
-                  
-                  <li class="mdc-list-item">
-                    <div class="list-item__text-field-container">
-                      <label id="selectedCard__label" class="mdc-text-field mdc-text-field--outlined" for="selectedCard">
-                        <input id="selectedCard" type="text" class="mdc-text-field__input" aria-labelledby="selectedCard__floatingLabel" required>
-                        <div id="selectedCard__outline" class="mdc-notched-outline">
-                          <div class="mdc-notched-outline__leading"></div>
-                          <div class="mdc-notched-outline__notch">
-                            <span id="selectedCard__floatingLabel" class="mdc-floating-label">Selected Card</span>
-                          </div>
-                          <div class="mdc-notched-outline__trailing"></div>
+            <fieldset id="buyEnergy__fieldset" disabled>
+              <legend class="mdc-typography mdc-typography--body2">
+                Energy credits can be purchased in units of $1.00.
+              </legend>
+              <ul id="buyEnergy__list" class="mdc-list mdc-list--non-interactive list--floating-height">
+                <li class="mdc-list-item">
+                  <div class="list-item__text-field-container">
+                    <label id="selectedCard__label" class="mdc-text-field mdc-text-field--outlined" for="selectedCard">
+                      <input id="selectedCard" type="text" class="mdc-text-field__input" aria-labelledby="selectedCard__floatingLabel" required>
+                      <div id="selectedCard__outline" class="mdc-notched-outline">
+                        <div class="mdc-notched-outline__leading"></div>
+                        <div class="mdc-notched-outline__notch">
+                          <span id="selectedCard__floatingLabel" class="mdc-floating-label">Selected Card</span>
                         </div>
-                      </label>
-                    </div>
-                  </li>
+                        <div class="mdc-notched-outline__trailing"></div>
+                      </div>
+                    </label>
+                  </div>
+                </li>
 
-                  <li class="mdc-list-item">
-                    <div class="list-item__text-field-container">
-                      <label id="purchaseAmount__label" class="mdc-text-field mdc-text-field--outlined" for="purchaseAmount">
-                        <input id="puchaseAmount" type="number" class="mdc-text-field__input" aria-labelledby="purchaseAmount__floatingLabel" autocomplete="off" required min="1" step="1" max="100">
-                        <div id="purchaseAmount__outline" class="mdc-notched-outline">
-                          <div class="mdc-notched-outline__leading"></div>
-                          <div class="mdc-notched-outline__notch">
-                            <span id="purchaseAmount__floatingLabel" class="mdc-floating-label">Purchase Amount</span>
-                          </div>
-                          <div class="mdc-notched-outline__trailing"></div>
+                <li class="mdc-list-item">
+                  <div class="list-item__text-field-container">
+                    <label id="purchaseAmount__label" class="mdc-text-field mdc-text-field--outlined" for="purchaseAmount">
+                      <input id="puchaseAmount" type="number" class="mdc-text-field__input" aria-labelledby="purchaseAmount__floatingLabel" autocomplete="off" required min="1" step="1" max="100">
+                      <div id="purchaseAmount__outline" class="mdc-notched-outline">
+                        <div class="mdc-notched-outline__leading"></div>
+                        <div class="mdc-notched-outline__notch">
+                          <span id="purchaseAmount__floatingLabel" class="mdc-floating-label">Purchase Amount</span>
                         </div>
-                      </label>
-                    </div>
-                  </li>
-                </ul>
-              </div>
-          
+                        <div class="mdc-notched-outline__trailing"></div>
+                      </div>
+                    </label>
+                  </div>
+                </li>
+              </ul>
+            </fieldset>
           </div>
+
           <footer class="mdc-dialog__actions">
             <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="cancel">
               <div class="mdc-button__ripple"></div>
@@ -472,19 +470,17 @@
             <div class="mdc-dialog__content" id="registration-content">
               <div class="onlyUnregistered">
                 <p>Registration is free.</p>
-                <p>Only registered users can change their display name, strength, or get more <a href="#energy">energy</a>.</p>
+                <p>Only registered users can change their display name, strength multiplier, or get more <a href="#energy">energy</a>.</p>
               </div>
               <div class="onlyRegistered">
                 You can change any of these current settings.
               </div>
 
-              <div class="form-group mdc-elevation--z20">
-                <ul id="loginPublic__list" class="mdc-list mdc-list--non-interactive list--floating-height">
-                  <li class="mdc-list-item">
-                    <div class="mdc-typography mdc-typography--body2">
+              <fieldset>
+                <legend class="mdc-typography mdc-typography--body2">
                       Public - visible to others
-                    </div>
-                  </li>
+                </legend>
+                <ul id="loginPublic__list" class="mdc-list mdc-list--non-interactive list--floating-height">
                   <li class="mdc-list-item">
                     <div class="list-item__text-field-container">
                       <label id="displayName__label" class="mdc-text-field mdc-text-field--outlined" for="displayName">
@@ -497,20 +493,36 @@
                           <div class="mdc-notched-outline__trailing"></div>
                         </div>
                       </label>
+                      <div class="mdc-text-field-helper-line">
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">displayed to other users when they are close to you</div>
+                      </div>
                     </div>
                   </li>
-                  
-                </ul>
-              </div>
-
-              <div class="form-group mdc-elevation--z20">
-                <ul id="loginPrivate__list" class="mdc-list mdc-list--non-interactive list--floating-height">
                   <li class="mdc-list-item">
-                    <div class="mdc-typography mdc-typography--body2">
-                      Private - not shared with anyone
+                    <div class="list-item__text-field-container">
+                      <label id="strength__label" class="mdc-text-field mdc-text-field--outlined" for="strength">
+                        <input id="strength" type="number" class="mdc-text-field__input" aria-labelledby="strength__floatingLabel" autocomplete="nickname given-name name" required tabindex="0" min="0" step="1" max="5" value="1">
+                        <div id="strength__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="strength__floatingLabel" class="mdc-floating-label">strength multiplier</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                      <div class="mdc-text-field-helper-line">
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">for volume, acceleration, and mass (limited by your available <a href="#energy">energy</a>)</div>
+                      </div>
                     </div>
                   </li>
-                  
+                </ul>
+              </fieldset>
+
+              <fieldset>
+                <legend class="mdc-typography mdc-typography--body2">
+                  Private - not shared with anyone
+                </legend>
+                <ul id="loginPrivate__list" class="mdc-list mdc-list--non-interactive list--floating-height">
                   <li class="mdc-list-item">
                     <div class="list-item__text-field-container">
                       <label id="email__label" class="mdc-text-field mdc-text-field--outlined" for="email">
@@ -525,6 +537,9 @@
                           <div class="mdc-notched-outline__trailing"></div>
                         </div>
                       </label>
+                      <div class="mdc-text-field-helper-line">
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">used to send information about your account</div>
+                      </div>
                     </div>
                   </li>
 
@@ -541,6 +556,9 @@
                           <div class="mdc-notched-outline__trailing"></div>
                         </div>
                       </label>
+                      <div class="mdc-text-field-helper-line">
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">verified before making changes and transfers</div>
+                      </div>
                     </div>
                   </li>
 
@@ -558,11 +576,14 @@
                           <div class="mdc-notched-outline__trailing"></div>
                         </div>
                       </label>
+                      <div class="mdc-text-field-helper-line">
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">verifies large transactions, and prevents duplicate accounts</div>
+                      </div>
                     </div>
                   </li>
                   
                 </ul>
-              </div>
+              </fieldset>
               
             </div>
             <footer class="mdc-dialog__actions">

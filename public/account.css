@@ -38,9 +38,19 @@
     opacity: 0.5;
 }
 
-.form-group {
+fieldset {
     border-radius: 8px;
     margin: 5px;
+}
+
+fieldset[disabled] {
+    background-color: #E0E0E0;
+}
+
+/* seems kludgy that we need BOTH these selectors present */
+fieldset .mdc-list .mdc-text-field,
+fieldset .mdc-list .list-item__text-field-container {
+    width: 100%
 }
 
 #notImplementedDependent .mdc-dialog__content,
