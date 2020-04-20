@@ -76,6 +76,7 @@ function delay(ms) { // Answer a promise that resolves after the specified ms.
 }
 
 function service(url, data, defaultProperties = {}) {
+    console.log('posting', url, data);
     return fetch(url, {
         method: 'post',
         headers: {
@@ -123,11 +124,11 @@ function handleSuccessfulLogin(user) {
         noteNew(user.displayName, 'name');
         noteNew(face, 'iconURL', false);
         // We can't make note of a new password, and we don't need to.
+        if ((user.credits - currentEnergy) > 0.3) changes.push('credits');
         noteChanges(changes);
     }
     setRegistered(user.id); // counting on user.id being falsey for unregistered users
     setupUser(user);
-    setInterval(updateEnergy, 200);
     // FIXME: update keystore if needed
     if (!user.id) return user;
     return storeCredentials(user).then(_ => user);
@@ -168,14 +169,16 @@ function passwordLoginIf(credential) {
     if (!credential || (credential.type !== 'password')) return Promise.resolve();
     return passwordLogin(credential);
 }
-function confirmPassword(id, e = null) { // case 2, above
-    if (e) console.warn(e);
+function gatherCredentialForConfirmation(id) {
     return gatherCredentialWithPassword([id], {
         forcePassword: true,
         forceDialog: true,
-        label: "Confirm",
-        message: e && e.message
-    })
+        label: "Confirm"
+    });
+}
+function confirmPassword(id, e = null) { // case 2, above
+    if (e) console.warn(e);
+    return gatherCredentialForConfirmation([id])
         .then(passwordLoginIf)
         .catch(e => confirmPassword(id, e))
 }
@@ -191,7 +194,6 @@ function logIn() { // case 1, above, followed by handleLoginResults
         mediation: "optional"
     })
         .then(credential => {
-            console.log('fixme credential:', credential);
             id = credential && credential.id;
             return credential;
         })
@@ -212,6 +214,17 @@ async function unregister() {
             .then(_ => setDb('ids', getIds().filter(e => e !== id)))
             .catch(console.error)
             .then(_ => logOut({preventSilentAccess: true, notify: true}))
+    });
+}
+
+function purchase({id, credits}) {
+    return confirmPassword(id).then(credential => {
+        console.log('purchase', id, 'credits', credits, 'with credential', credential)
+        if (!credential) return;
+        if (credential.id !== id) return Promise.reject(new Error("Changed user from ${id} to ${credential.id}."));
+        credential.credits = credits;
+        service('/purchase', credential, credential)
+            .then(handleLoginResult);
     });
 }
 
@@ -480,7 +493,7 @@ async function gatherCredentialWithPassword(ids, {
     forcePassword = false,
     forceDialog = forcePassword,
     label = "Sign in",
-    message = ''}) {
+    message = ''} = {}) {
     // FIXME: display message, if any (e.g., that the password entered was wrong)
     function getIconElement(avatar) { return avatar.querySelector('img'); }
     function getNameElement(avatar) { return avatar.querySelector('.mdc-list-item__primary-text'); }
@@ -488,16 +501,19 @@ async function gatherCredentialWithPassword(ids, {
     const passwords = STORE_PASSWORDS && !forcePassword && [];
     if (!passwords && ids.length) forceDialog = true;
     var credential = {}, cleanup;
-    console.log('gatherCredentialsWithPasswords', ids, 'dialog:', forceDialog, 'password:', forcePassword,
+    console.log('gatherCredentialWithPasswords', ids, 'dialog:', forceDialog, 'password:', forcePassword,
                 'passwords:', passwords, 'label/message:', label, message);
 
     // Two cases where we bail early.
     if (!ids.length) return;
     if ((ids.length === 1) && !forceDialog) { // No need for dialog. Just a snackbar notification.
         const cred = getDb(ids[0]);
-        cred.id = signingIn__secondary.innerHTML = ids[0];
-        signingInSnackbar.open()
-        return cred;
+        if (cred.password) {
+            cred.id = ids[0];
+            signingIn__label.innerText = `Signing in as ${cred.id}`;
+            signingInSnackbar.open()
+            return cred;
+        }
     }
 
     // Things we can set up before there is a dialog.
@@ -583,6 +599,7 @@ function reconcileLocalStorage(credential) {
     // If a native navigator.credentials produces a credential that isn't in or local storage, add it.
     // That way it will be available for password confirmation.
     if (!credential) {
+        /*
         // Kludge alert:
         // It is possible that a security-consious user has opted out of the use of the browser's account storage,
         // and there's no way for us to know the difference between this vs simply not choosing from among multiple browser accounts!
@@ -607,6 +624,7 @@ function reconcileLocalStorage(credential) {
             cred.type = 'password';
             return cred;
         }
+        */
         return;
     }
     if (!getDb(credential.id)) storeLocalCredential(credential);
@@ -622,7 +640,19 @@ function filterDeletedCredential(credential) {
 const PREVENT_SILENT_KEY = 'preventSilentAccess';
 async function getCredential(options) {
     if (browserHasPasswordCredentialStore()) {
+        const start = Date.now();
         return navigator.credentials.get(options)
+            .then(cred => {
+                const elapsed = Date.now() - start;
+                console.log('getCredentials', cred, elapsed);
+                if (elapsed > 50) return cred; // explicit user action: believe the user
+                if (cred) return cred;
+                const ids = getIds();
+                if (ids.length) { // There should have been choices for the user. Must be opting out of browser store
+                    return gatherCredentialWithPassword(ids);
+                }
+                return;
+            })
             .then(filterDeletedCredential)
             .then(reconcileLocalStorage);
     } // Fake our own.
@@ -671,9 +701,10 @@ function notifyLoggedOut(notify) {
 }
 function noteChanges(changes) {
     if (!changes.length) return;
-    changed__secondary.innerText = (changes.length > 1)
+    const label = (changes.length > 1)
         ? changes.slice(0, -1).join(', ') + ' and ' + changes[changes.length - 1]
-        : changes[0];
+          : changes[0];
+    changed__label.innerText = `Changed ${label}.`;
     changedSnackbar.open();
 }
 
@@ -698,8 +729,12 @@ function setRegistered(id) {
     }
 }
 function setupUser(credential) {
-    profile__image.src = profilemenu__image.src = credential.iconURL;
-    profilemenu__name.innerText = credential.name;
+    const {name, iconURL, credits, strength} = credential;
+    console.log('setupUser', credential);
+    if (iconURL) profile__image.src = profilemenu__image.src = iconURL;
+    if (name) profilemenu__name.innerText = name;
+    if (credits !== undefined) currentEnergy = credits;
+    if (strength) currentStrength = strength;
     return credential;
 }
 function onAppdrawerClosed() {
@@ -723,7 +758,8 @@ function onRegistrationSubmit(e) {
         oldPassword: oldPassword.value,
         name: displayName.value,
         iconURL: face.value,
-        password: password.value
+        password: password.value,
+        strength: Number.parseInt(strength.value)
     }).catch(e => {
         const message = e.message || e;
         registrationFail__secondary.innerText = message;
@@ -737,7 +773,8 @@ function onRegistrationSubmit(e) {
 }
 function onBuyEnergy(e) {
     e.preventDefault();
-    // FIXME increase energy
+    creditsDialog.close();
+    purchase({id: isRegistered, credits: Number.parseInt(purchaseAmount.value)}).catch(console.error);
 }
 function togglePasswordVisibility(e) {
     e.preventDefault();
@@ -787,7 +824,9 @@ async function openRegistration() {
         displayName.value = credential.name || '';
         oldEmail.value = email.value = credential.id || '';
         oldPassword.value = password.value = credential.password || '';
+        strength.value = currentStrength;
         register__submit.value = isRegistered ? "Update" : "Register";
+        strength.disabled = !isRegistered;
         const fields = instantiateFields(registration);
         const lists = instantiateAndLayoutLists(registration);
         updateFaceResult();
@@ -798,18 +837,44 @@ async function openRegistration() {
         });
     });
 }
-const ENERGY_TIME = 5 * 60 * 1000;
-const energyStart = Date.now();
+const MAX_STRENGTH = Number.parseInt(strength.getAttribute('max')); // Consume up to N times normal rate.
+const ENERGY_INTERVAL_MS = 100; // How often do we sample energy use.
+const UPDATES_PER_REPORT = 10 * 1000 / ENERGY_INTERVAL_MS;
+// Registered users have N minutes use replenished each day. Anonymous will run out in that time.
+const USE_TIME_MS = 10 * 60 * 1000;  // 10 minutes for demo purposes.
+const AVERAGE_NORMAL_CONSUMPTION_PER_INTERVAL = 0.5; // With our random "meter", below.
+const REPLENISHMENT_PER_INTERVAL = ENERGY_INTERVAL_MS / (USE_TIME_MS * AVERAGE_NORMAL_CONSUMPTION_PER_INTERVAL);
 const consumptionBuffer = Array(5).fill(0);
+const energyBuffer = Array(5 * 1000 / ENERGY_INTERVAL_MS).fill(0);
 var currentEnergy = 1;
+var currentStrength = 1;
+var updateCounter = 0;
 function average(array) {
     return array.reduce((acc, amount) => acc + amount, 0) / array.length;
 }
 function updateEnergy() {
-    energyBarLinearProgress.buffer = currentEnergy = 1 - ((Date.now() - energyStart) / ENERGY_TIME);
+    // Should we stretch out the tail by limiting the consumptionThisPeriod to be no more than currentEnergy?
+    const consumptionThisPeriod = Math.min(currentEnergy, currentStrength * Math.random()); // FIXME
+    const scaled_consumption = consumptionThisPeriod * REPLENISHMENT_PER_INTERVAL;
+    currentEnergy = currentEnergy - scaled_consumption;
+    if (isRegistered)
+        currentEnergy = currentEnergy + REPLENISHMENT_PER_INTERVAL / 2;
+    if (isRegistered && !(++updateCounter % UPDATES_PER_REPORT)) {
+        console.log('consumption:', consumptionThisPeriod, 'scaled:', scaled_consumption, 'energy:', currentEnergy);
+        updateCounter = 0;
+        service('/reportEnergy', {id: isRegistered, energy: currentEnergy});
+    }
+    // Consumption is averaged and shown as the fraction of MAX_STRENGTH;
     consumptionBuffer.shift();
-    consumptionBuffer.push(0.75 * Math.random());
+    consumptionBuffer.push(consumptionThisPeriod / MAX_STRENGTH);
     energyBarLinearProgress.progress = average(consumptionBuffer);
+    // Energy is averaged and shown as the fraction part in linear progress "buffer", and the amount over 1 as the reserve.
+    energyBuffer.shift();
+    energyBuffer.push(currentEnergy);
+    const averageEnergy = average(energyBuffer);
+    const reserve = Math.floor(averageEnergy); // amount above 1
+    energyReserve.innerHTML = reserve;
+    energyBarLinearProgress.buffer = averageEnergy - reserve;
 }
 function gotoHash(x) {
     const hash = location.hash;
@@ -870,16 +935,6 @@ const webcamDialog = new MDCDialog(webcam);
 const profileRipple = new MDCRipple(profile);
 const profileMenu = new MDCMenu(profilemenu);
 
-const buyEnergyList = new MDCList(buyEnergy__list);
-
-const selectedCardTextField = new MDCTextField(selectedCard__label);
-const selectedCardNotchedOutline = new MDCNotchedOutline(selectedCard__outline);
-const selectedCardFloatingLabel = new MDCFloatingLabel(selectedCard__floatingLabel);
-
-const purchaseAmountTextField = new MDCTextField(purchaseAmount__label);
-const purchaseAmountNotchedOutline = new MDCNotchedOutline(purchaseAmount__outline);
-const purchaseAmountFloatingLabel = new MDCFloatingLabel(purchaseAmount__floatingLabel);
-
 const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 
 const loggedOutSnackbar = new MDCSnackbar(loggedOut);
@@ -894,12 +949,16 @@ if (!navigator.mediaDevices) { alert('This browser does not support webcams!'); 
     [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
     [notImplementedDependentDialog, 'MDCDialog:closed', '#notImplementedDependent'],
     [privacyDialog, 'MDCDialog:closed', '#privacy'],
-    [creditsDialog, 'MDCDialog:closed', '#energy'],
+    [creditsDialog, 'MDCDialog:closed', '#energy'],    
     [profileMenu, 'MDCMenuSurface:closed', '#profile']
 ].forEach(([element, event, from, to = '']) => element.listen(event, _ => goIf(from, to)));
 
 webcamDialog.listen('MDCDialog:closed', webcamStop);
 appdrawerDrawer.listen('MDCDrawer:closed', onAppdrawerClosed);
+creditsDialog.listen('MDCDialog:opened', _ => {
+    const fields = instantiateFields(credits);
+    const lists = instantiateAndLayoutLists(credits);
+});
 topbarTopAppBar.listen('MDCTopAppBar:nav', _ => location.hash = 'navigation');
 loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
     if (detail.reason === 'action') location.hash = 'login';
@@ -921,4 +980,5 @@ loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
 ].forEach(([element, operation, event = 'click']) => element.addEventListener(event, operation));
 
 const initialSetUp = logIn();
+setInterval(updateEnergy, ENERGY_INTERVAL_MS);
 gotoHash(99);

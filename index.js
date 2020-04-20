@@ -37,6 +37,8 @@ email1 => userid; email2 => userid; ...
 function trimUser(user) { // What gets returned to user. FIXME: determine the minimum needed.
     const cred = Object.assign({}, user);
     cred.faces = cred.faces.slice(-1);
+    if (!cred.strength) cred.strength = 1;
+    if (!('credits' in cred)) cred.credits = 1;
     return cred;
 }
 
@@ -56,7 +58,9 @@ function makeTransformer(existingKey) {
 const transformers = {
     email: makeTransformer('emails'),
     oldEmail: _ => {},
-    face: makeTransformer('faces')
+    face: makeTransformer('faces'),
+    credits: (entry, existing) => { existing.credits = (existing.credits || 1) + entry; },
+    energy: (entry, existing) => { existing.credits = entry; }
 };
 
 function passwordFail(user, options) {
@@ -359,10 +363,10 @@ function promiseResponse(res, promise) {
         });
 }
 app.post('/registration', function (req, res) {
-    const {id, oldEmail, name, iconURL, password, oldPassword} = req.body;
+    const {id, oldEmail, name, iconURL, password, oldPassword, strength} = req.body;
     promiseResponse(res,
                     computeDescriptor(iconURL).then(descriptor => {
-                        return setUser({email:id, oldEmail, displayName:name, face:iconURL, password},
+                        return setUser({email:id, oldEmail, displayName:name, face:iconURL, password, strength},
                                        {auth: oldPassword || password, descriptor: descriptor})
                             .then(trimUser);
                     }));
@@ -372,12 +376,24 @@ app.post('/login', function (req, res) {
     promiseResponse(res,
                     id
                     ? getUser(id, {auth: password}).then(trimUser)
-                    : Promise.resolve({name: uniqueNamesGenerator(namesConfig)}));
+                    : Promise.resolve({name: uniqueNamesGenerator(namesConfig), strength: 1, credits: 1}));
 });
 app.post('/delete', function (req, res) {
     const {id, password} = req.body;
     promiseResponse(res, deleteUser(id, {auth: password}));
 });
+
+app.post('/purchase', function (req, res) {
+    const {id, password, credits} = req.body;
+    promiseResponse(res, setUser({email:id, credits}, {auth: password}));
+});
+
+app.post('/reportEnergy', function (req, res) {
+    // FIXME: should check that this is coming from our server (e.g., audio mixer).
+    const {id, energy} = req.body;
+    promiseResponse(res, setUser({email:id, energy}, {}));
+});
+
 
 var acceptingRegistrants = true; // Server.close doesn't shut out EventSource reconnects.
 const SHUTDOWN_RETRY_TIMEOUT_MS = 30 * 1000;

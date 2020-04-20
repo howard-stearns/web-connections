@@ -52,9 +52,13 @@ fieldset .mdc-list .mdc-text-field,
 fieldset .mdc-list .list-item__text-field-container {
     width: 100%
 }
+.energy-reserve::before {
+    content: "+";
+}
 
 #notImplementedDependent .mdc-dialog__content,
-.notImplemented li {
+i.notImplementedDependent,
+.notImplementedDependent li {
     color: var(--mdc-theme-error);
 }
 #notImplementedIndependent .mdc-dialog__content,

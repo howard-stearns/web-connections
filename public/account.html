@@ -33,6 +33,7 @@
               <span class="mdc-linear-progress__bar-inner"></span>
             </div>
           </div>
+          <span id="energyReserve" class="energy-reserve">0</span>
           
           <button id="profile"
                   class="mdc-icon-button mdc-top-app-bar__action-item mdc-icon-button--on"
@@ -124,16 +125,9 @@
     <div class="mdc-drawer-scrim"></div>
     <!-- CONTENT -->
     <div class="mdc-top-app-bar--fixed-adjust">
-      <p>These need to be completed before this will make sense to anyone - the minimum viable prototype:
-        <ul class="notImplemented">
-          <li>FIXME: strength setting</li>
-          <li>FIXME: energy management (unregistered takes 10 seconds to power up)</li>
-          <li>FIXME: sample "avatars", to id, give credits, give find-me, must for all(?)</li>
-        </ul>
-      </p>
       <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
         <ul class="implemented">
-          <li>Does not require login to start.</li>
+          <li>Does not require registration to start.</li>
           <li>You don't register just once, but on each device.</li>
           <li>That's because it keeps track on the machine so you don't have to sign in all the time, but confirms when needed. (The model semantics for this is per a W3C draft standard.)</li>
           <li>Tries softly to get you to register, and if you are registered, tries to get you to use your account, but you <i>can</i> be anonymous.</li>
@@ -151,8 +145,9 @@
               <li>move to highfidelity.co? aws?</li>
               <li>scale up energy and face check</li>
               <li>unit tests</li>
-              <li>scale internal client db (localStorage is fine for now, but indexDb is better)</li>
+              <li>less data trasnfer (currently sending "everything" back and forth between client and server)</li>
               <li>code cleanup</li>
+              <li>scale internal client db (localStorage is fine for now, but indexDb is better)</li>
             </ul>
           </li>
           <li>Security:
@@ -229,9 +224,8 @@
       <div class="mdc-snackbar__surface">
         <div class="mdc-snackbar__label"
              role="status"
-             aria-live="polite">
-          Signing in as <span id="signingIn__secondary"></span>
-        </div>
+             id="signingIn__label"
+             aria-live="polite"></div>
         <div class="mdc-snackbar__actions">
           <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
         </div>
@@ -240,10 +234,9 @@
     <div id="changed" class="mdc-snackbar">
       <div class="mdc-snackbar__surface">
         <div class="mdc-snackbar__label"
+             id="changed__label"
              role="status"
-             aria-live="polite">
-          Changed <span id="changed__secondary"></span>.
-        </div>
+             aria-live="polite"></div>
         <div class="mdc-snackbar__actions">
           <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
         </div>
@@ -414,11 +407,11 @@
                 <li class="mdc-list-item">
                   <div class="list-item__text-field-container">
                     <label id="selectedCard__label" class="mdc-text-field mdc-text-field--outlined" for="selectedCard">
-                      <input id="selectedCard" type="text" class="mdc-text-field__input" aria-labelledby="selectedCard__floatingLabel" required>
+                      <input id="selectedCard" type="text" class="mdc-text-field__input" aria-labelledby="selectedCard__floatingLabel" disabled>
                       <div id="selectedCard__outline" class="mdc-notched-outline">
                         <div class="mdc-notched-outline__leading"></div>
                         <div class="mdc-notched-outline__notch">
-                          <span id="selectedCard__floatingLabel" class="mdc-floating-label">Selected Card</span>
+                          <span id="selectedCard__floatingLabel" class="mdc-floating-label"><i class="notImplementedDependent">Credit card stuff Not Implemented </i></span>
                         </div>
                         <div class="mdc-notched-outline__trailing"></div>
                       </div>
@@ -429,7 +422,7 @@
                 <li class="mdc-list-item">
                   <div class="list-item__text-field-container">
                     <label id="purchaseAmount__label" class="mdc-text-field mdc-text-field--outlined" for="purchaseAmount">
-                      <input id="puchaseAmount" type="number" class="mdc-text-field__input" aria-labelledby="purchaseAmount__floatingLabel" autocomplete="off" required min="1" step="1" max="100">
+                      <input id="purchaseAmount" type="number" class="mdc-text-field__input" aria-labelledby="purchaseAmount__floatingLabel" autocomplete="off" required min="1" step="1" max="100">
                       <div id="purchaseAmount__outline" class="mdc-notched-outline">
                         <div class="mdc-notched-outline__leading"></div>
                         <div class="mdc-notched-outline__notch">
