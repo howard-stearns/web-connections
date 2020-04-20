@@ -269,6 +269,8 @@ function webcamSetup() {
         models
     ]), 10 * 1000).then(_ => {
         models = null; // Won't actually get gc'd while face.api is using it, but we're living clean here.
+        lastInstruction = '';
+        captured = gotNeutral = gotExpression = gotFail = descriptor = false;
         return webcamCapture({ width: webcamVideo.offsetWidth, height: webcamVideo.offsetHeight }, Date.now());
     });
 }
@@ -762,7 +764,7 @@ function onRegistrationSubmit(e) {
         strength: Number.parseInt(strength.value)
     }).catch(e => {
         const message = e.message || e;
-        registrationFail__secondary.innerText = message;
+        registrationFail.innerText = message;
         registrationFailSnackbar.open();
         if (message.includes('email')) {
             email.focus();
