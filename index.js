@@ -14,6 +14,7 @@ const { uniqueNamesGenerator, adjectives, colors, animals } = require('unique-na
 const tfjs = require('@tensorflow/tfjs-node'); // Speeds up tensorflow (for face-api)
 const faceapi = require('face-api.js');
 const { Canvas, Image, ImageData, loadImage } = require('canvas');
+const { lock } = require('ki1r0y.lock');
 
 process.title = "p2p-load-test";
 const app = express();
@@ -29,9 +30,135 @@ const namesConfig = {
 
 if (redis) redis.on('error', console.error);
 
+function promiseLock(key, thunk) {
+    // A wrapper around lock, but:
+    // - thunk must return a promise.
+    // - handles the calling of unlock automatically, when thunk resolves.
+    // - itself returns a promise that resolves to whatever thunk resolves to
+    return new Promise((resolve, reject) => {
+        lock(key, unlock => {
+            thunk().then(result => {
+                unlock();
+                resolve(result);
+            }, rejection => {
+                unlock();
+                reject(rejection);
+            });
+        });
+    });
+}
+
+// Low-level wrapers around the db.
+const dbdir = path.join(__dirname, 'db');
+fs.mkdir(dbdir, e => e && (e.code !== 'EEXIST') && console.error(e));
+function dbPath(key) { return path.join(dbdir, key); }
+function makeResolver(resolve, reject, datafier) {
+    return (e, data) => {
+        if (e && (e.code !== 'ENOENT')) return reject(e);
+        resolve(!e && datafier && datafier(data));
+    };
+}
+const fakeDb = {};
+function fakeDbSet(key, val) {
+    fakeDb[key] = val;
+    return new Promise((resolve, reject) => fs.writeFile(dbPath(key), JSON.stringify(val), makeResolver(resolve, reject)));
+}
+function fakeDbGet(key) {
+    const cached = fakeDb[key];
+    if (cached) return Promise.resolve(cached);
+    return new Promise((resolve, reject) => fs.readFile(dbPath(key), makeResolver(resolve, reject, JSON.parse)));
+}
+function fakeDbDelete(key) {
+    delete fakeDb[key];
+    return new Promise((resolve, reject) => fs.unlink(dbPath(key), makeResolver(resolve, reject)));
+}
+
+function getDbString(id) { return fakeDbGet(id); }
+function setDbString(id, value) { return fakeDbSet(id, value); }
+function removeDbString(id) { return fakeDbDelete(id); }
+
+async function addToDbSet(set, element) {
+    var ids = await fakeDbGet(set);
+    if (!ids) ids = [];
+    if (!ids.includes(element)) {
+        ids.push(element);
+        await fakeDbSet(set, ids);
+    }
+}
+async function removeFromDbSet(set, element) {
+    var ids = await fakeDbGet(set);
+    if (!ids) ids = [];
+    ids.splice(ids.indexOf(element), 1);
+    await fakeDbSet(set, ids);
+}
+async function iterDbSet(set, func) { // wait for func(element) of each member of the set (unless error along the way)
+    var ids = await fakeDbGet(set);
+    if (!ids) return;
+    for (const id of ids) {
+        await func(id);
+    }
+}
+
+async function addToDbOrderedSet(set, element) {
+    var ids = await fakeDbGet(set);
+    if (!ids) ids = [];
+    if (!ids.includes(element)) {
+        ids.push(element);
+        await fakeDbSet(set, ids);
+    }
+}
+function getDbOrderedSet(set) {
+    return fakeDbGet(set);
+}
+function removeDbOrderedSet(set) {
+    return fakeDbDelete(set);
+}
+
+function subListKey(uid, subkey) {
+    return `${uid}:${subkey}List`;
+}
+function isSubList(uid, value) {
+    if (typeof value !== 'string') return false;
+    if (!value.startsWith(uid)) return false;
+    return value.endsWith('List');
+}
+async function getDbHash(uid) {
+    const raw = await fakeDbGet(uid);
+    if (!raw) return Promise.resolve(); // NOT an empty hash!
+    const hash = Object.assign({}, raw);
+    for (const [key, val] of Object.entries(hash)) {
+        if (isSubList(uid, val)) {
+            hash[key] = await getDbOrderedSet(val);
+        }
+    }
+    return hash
+}
+async function removeDbHash(uid) {
+    const raw = await fakeDbGet(uid);
+    if (!raw) return;
+    for (const [key, val] of Object.entries(raw)) {
+        if (isSubList(uid, val)) await removeDbOrderedSet(val);
+    }
+    await fakeDbDelete(uid);
+}
+async function setDbHash(uid, hash) {
+    const raw = Object.assign({}, hash);
+    for (const [key, val] of Object.entries(raw)) {
+        if (!Array.isArray(val)) continue;
+        const subkey = subListKey(uid, key);
+        val.forEach(async element => { await addToDbOrderedSet(subkey, element); });
+        raw[key] = subkey;
+    }
+    fakeDbSet(uid, raw);
+}
+
+// Higher level operations on our specific db
+// FIXME: there are opportunities for optimization here:
+// - where we get whole objects to operate on, and then store the whole object;
+// - where we read parts of a compound object to find out what type of operation to do.
 /*
 In database:
-userid => {displayName, passwordHash, emails, faces, keypairs}
+userid => {displayName, credits, strength, passwordHash, meanDescriptor, emails, faces, descriptor, keypairs}
 email1 => userid; email2 => userid; ...
 */
 function trimUser(user) { // What gets returned to user. FIXME: determine the minimum needed.
@@ -42,8 +169,6 @@ function trimUser(user) { // What gets returned to user. FIXME: determine the mi
     return cred;
 }
 
-// FIXME: this first go is in-memory, not redis
-const fakeDb = {};
 function listify(entry, existingKey, existing) {
     var list = existing[existingKey];
     if (!list) {
@@ -67,19 +192,7 @@ function passwordFail(user, options) {
     // Subtle: 'auth' in options is true if password is supplied at all, even as undefined.
     if (('auth' in options) && (user.password !== options.auth)) {
         // FIXME message?
-        return Promise.reject(new Error("Password does not match."));
-    }
-}
-function mismatchedFaceFail(user, options) {
-    // Fails if given an empty options.descriptor. OK if not asked to check descriptor.
-    if (!('descriptor' in options)) return;
-    // FIXME message?
-    if (!options.descriptor) return Promise.reject(new Error("Security selfie is not clear."));
-    if (user.meanDescriptor) {
-        const meanDifference = descriptorDistance(user.meanDescriptor, options.descriptor);
-        pseudo.info({url: `/interUser?distance=${Math.round(meanDifference * 100)}`});
-        // FIXME message?
-        if (meanDifference > 0.52) return Promise.reject(new Error(`Your face is wrong. ${meanDifference.toFixed(2)} from previous registration. And you're old.`));
+        throw new Error("Password does not match.");
     }
 }
 function elide(string, nchars = 5) {
@@ -89,76 +202,106 @@ function elide(string, nchars = 5) {
 function elideParts(email, separator = '@', nchars = 5) {
     return email.split(separator).map(s => elide(s, nchars)).join(separator);
 }
-function matchesOtherFaceFail(userid, options) {
-    if (!options.descriptor) return;
-    for (const uid of fakeDb['ids']) {
-        const user = fakeDb[uid];
-        if (!user || !user.meanDescriptor || uid === userid) continue;
-        const difference = descriptorDistance(options.descriptor, user.meanDescriptor);
-        const id = user.emails[user.emails.length - 1];
-        pseudo.info({url: `/intraUser?distance=${Math.round(difference * 100)}&id=${id}`});
+
+// Descriptors, and lists of descriptors, are stores in the database as json (to avoid complications of nexted values).
+async function matchesOtherFaceFail(userid, options) {
+    if (!options.descriptor) return null;
+    await iterDbSet('ids', uid => {
+        return getDbHash(uid).then(user => {
+            if (!user || !user.meanDescriptor || uid === userid) return;
+            const otherDescriptor = JSON.parse(user.meanDescriptor);
+            const difference = descriptorDistance(options.descriptor, otherDescriptor);
+            const id = user.emails[user.emails.length - 1];
+            pseudo.info({url: `/intraUser?distance=${Math.round(difference * 100)}&id=${id}`});
+            // FIXME message?
+            if (difference < 0.50) {
+                throw new Error(`Your face is already registered under another email. ${difference.toFixed(2)} from ${elideParts(id)}.`);
+            }
+        });
+    });
+}
+function mismatchedFaceFail(user, options) {
+    // Fails if given an empty options.descriptor. OK if not asked to check descriptor.
+    if (!('descriptor' in options)) return;
+    // FIXME message?
+    if (!options.descriptor) return Promise.reject(new Error("Security selfie is not clear."));
+    if (user.meanDescriptor) {
+        const mean = JSON.parse(user.meanDescriptor);
+        const meanDifference = descriptorDistance(mean, options.descriptor);
+        pseudo.info({url: `/interUser?distance=${Math.round(meanDifference * 100)}`});
         // FIXME message?
-        if (difference < 0.50)
-            return Promise.reject(new Error(`Your face is already registered under another email. ${difference.toFixed(2)} from ${elideParts(id)}.`));
+        if (meanDifference > 0.52) throw new Error(`Your face is wrong. ${meanDifference.toFixed(2)} from previous registration. And you're old.`);
     }
 }
 function updateMeanDescriptor(user, options) {
     if (!options.descriptor) return;
     const mean = Array(128).fill(0);
-    const descriptors = user.descriptors ? user.descriptors.concat() : [];
+    const descriptors = user.descriptors ? JSON.parse(user.descriptors) : [];
     descriptors.push(options.descriptor)
     descriptors.forEach(d => d.forEach((v, i) => mean[i] += v));
     mean.forEach((v, i) => mean[i] /= descriptors.length);
-    user.meanDescriptor = mean;
+    user.meanDescriptor = JSON.stringify(mean);
+    user.descriptors = JSON.stringify(descriptors);
 }
 
-fakeDb['ids'] = [];
-function setUser(data, options) {
+// Only the top level operations get locks, on email, and for get/set also on userid. (Nothing nested.)
+async function setUser(data, options) {
     const emailPointersToUpdate = [];
     const emailKey = data.oldEmail || data.email;
-    var userid = fakeDb[emailKey];
+    var userid = await getDbString(emailKey);
     if (!userid) {  // Add pointer from email.
         userid = uuidv4();
         emailPointersToUpdate.push(emailKey);
     }
-    if (data.oldEmail && data.email && !fakeDb[data.email]) { // Add additonal pointer if email changed.
-        emailPointersToUpdate.push(data.email);
-    }
-    var user = fakeDb[userid];
-    if (user) {
-        const fail = passwordFail(user, options) || mismatchedFaceFail(user, options)
-        if (fail) return fail;
-    } else {
-        const altEgoFail = matchesOtherFaceFail(user, options);
-        if (altEgoFail) return altEgoFail;
-        user = fakeDb[userid] = {};
-    }
-    // Can't be done before security checks, else people could steal addresses.
-    if (!fakeDb['ids'].includes(userid)) fakeDb['ids'].push(userid);
-    emailPointersToUpdate.forEach(key => fakeDb[key] = userid);
-    updateMeanDescriptor(user, options);
-    Object.keys(data).forEach(key => {
-        const f = transformers[key] || ((entry, existing) => existing[key] = entry);
-        f(data[key], user);
+    const locks = [userid, emailKey];
+    if (data.oldEmail && data.oldEmail !== data.email) locks.push(data.email);
+    return promiseLock(locks, async _ => {
+        if (data.oldEmail && data.email && !await getDbString(data.email)) { // Add additonal pointer if email changed.
+            emailPointersToUpdate.push(data.email);
+        }
+        var user = await getDbHash(userid);
+        if (user) {
+            await passwordFail(user, options);
+            await mismatchedFaceFail(user, options);
+        } else {
+            await matchesOtherFaceFail(userid, options);
+            user = {};
+        }
+        // Can't be done before security checks, else people could steal addresses.
+        await addToDbSet('ids', userid);
+        await Promise.all(emailPointersToUpdate.map(key => setDbString(key, userid)));
+        updateMeanDescriptor(user, options);
+        Object.keys(data).forEach(key => {
+            const f = transformers[key] || ((entry, existing) => existing[key] = entry);
+            f(data[key], user);
+        });
+        await setDbHash(userid, user);
+        // Return whole user so callers can update. (Future uses might make optional.)
+        return user;
     });
-    return Promise.resolve(user); // Return whole user so callers can update. (Future uses might make optional.)
 }
 function getUser(email, options) {
-    const userid = fakeDb[email];
-    if (!userid) return Promise.reject(new Error(`No such email: ${email}.`));
-    const user = fakeDb[userid];
-    if (!user) return Promise.reject(new Error(`No user for email: ${email}.`));
-    return passwordFail(user, options) || Promise.resolve(user);
+    return getDbString(email).then(userid => {
+        if (!userid) return Promise.reject(new Error(`No such email: ${email}.`));
+        return promiseLock([email, userid], _ => {
+            return getDbHash(userid).then(async user => {
+                if (!user) throw new Error(`No user for email: ${email}.`);
+                passwordFail(user, options)
+                return user;
+            });
+        });
+    });
 }
 function deleteUser(email, options) {
-    return getUser(email, options).then(user => {
-        const userid = fakeDb[email];
-        user.emails.forEach(id => delete fakeDb[id]);
-        delete fakeDb[userid];
-        const ids = fakeDb['ids'];
-        ids.splice(ids.indexOf(userid), 1);
-        return {};
-    });
+    return getUser(email, options)
+        .then(user => promiseLock(email, _ => {
+            return getDbString(email).then(userid => {
+                return Promise.all(user.emails.map(id => removeDbString(id)))
+                    .then(_ => removeDbHash(userid))
+                    .then(_ => removeFromDbSet('ids', userid))
+                    .then(_ => ({}));
+            });
+        }));
 }
 
 
@@ -363,6 +506,7 @@ function promiseResponse(res, promise) {
         });
 }
 app.post('/registration', function (req, res) {
+    // Explicitly deconstruct and reconstruct the credential, so that we don't accidentally include, e.g., credits.
     const {id, oldEmail, name, iconURL, password, oldPassword, strength} = req.body;
     promiseResponse(res,
                     computeDescriptor(iconURL).then(descriptor => {
