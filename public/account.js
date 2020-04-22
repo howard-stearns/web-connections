@@ -51,7 +51,7 @@ function deleteCredential(id) {
     setCredential({id, password: DELETED_CREDENTIAL_PROPERTY_VALUE,
                    name: DELETED_CREDENTIAL_PROPERTY_VALUE});
 }
-const dbVersion = 5;
+const dbVersion = 6;
 if ((getDb('version') || 0) < dbVersion) {
     console.warn('Clearing local db.');
     if (browserHasPasswordCredentialStore()) {
@@ -64,7 +64,7 @@ if ((getDb('version') || 0) < dbVersion) {
 // Gives an alert (but does not current reject) if a promise takes more than timeoutMS to resolve. Also logs execution time.
 function withTimeout(label, promise, timeoutMs = 5000) {
     const start = Date.now();
-    const timeout = setTimeout(_ => alert(`Could not complete ${label}.`), timeoutMs);
+    const timeout = setTimeout(_ => alert(`Debug: timeout during ${label}.`), timeoutMs);
     return promise.then(result => {
         clearTimeout(timeout);
         console.log(label, Date.now() - start);
@@ -311,6 +311,18 @@ function findFaces(displaySize) {
     }));
 }
 
+// Expressed in horizontal dimensions, but works for height, too, of course.
+function reDimension(left, width, frameWidth, margin) {
+    const fixmeLeft = left, fixmeWidth = width;
+    const center = left + (width / 2);
+    width += (2 * margin);
+    left = Math.max(0, center - (width / 2));
+    const right = Math.min(frameWidth, center + (width / 2));
+    width = right - left;
+    return [left, width];
+}
+
+
 var lastInstruction = '', gotNeutral = false, gotExpression = false, gotFail = false, descriptor = false;
 var captured;
 async function webcamCapture(displaySize, start) {
@@ -369,12 +381,15 @@ async function webcamCapture(displaySize, start) {
                 }
                 if (!captured) {
                     const bigBox = bestFace(raw).detection.box;
+                    const scaledMargin = margin * webcamVideo.videoWidth / displaySize.width;
+                    const [left, width] = reDimension(bigBox.left, bigBox.width, webcamVideo.videoWidth, scaledMargin);
+                    const [top, height] = reDimension(bigBox.top, bigBox.height, webcamVideo.videoHeight, scaledMargin);
                     captured = document.createElement("canvas");
-                    captured.width = bigBox.width;
-                    captured.height = bigBox.height;
+                    captured.width = width;
+                    captured.height = height;
                     captured.getContext('2d').drawImage(webcamVideo,
-                                                        bigBox.left, bigBox.top, captured.width, captured.height,
-                                                        0, 0, captured.width, captured.height);
+                                                        left, top, width, height,
+                                                        0, 0, width, height);
                 }
             }
         }
@@ -841,7 +856,7 @@ async function openRegistration() {
 }
 const MAX_STRENGTH = Number.parseInt(strength.getAttribute('max')); // Consume up to N times normal rate.
 const ENERGY_INTERVAL_MS = 100; // How often do we sample energy use.
-const UPDATES_PER_REPORT = 10 * 1000 / ENERGY_INTERVAL_MS;
+const UPDATES_PER_REPORT = 15 * 1000 / ENERGY_INTERVAL_MS;  // Every 15 seconds
 // Registered users have N minutes use replenished each day. Anonymous will run out in that time.
 const USE_TIME_MS = 10 * 60 * 1000;  // 10 minutes for demo purposes.
 const AVERAGE_NORMAL_CONSUMPTION_PER_INTERVAL = 0.5; // With our random "meter", below.
@@ -861,6 +876,7 @@ function updateEnergy() {
     currentEnergy = currentEnergy - scaled_consumption;
     if (isRegistered)
         currentEnergy = currentEnergy + REPLENISHMENT_PER_INTERVAL / 2;
+    // FIXME: actual /reportEnergy should be done by a mixer with proper auth, not the client.
     if (isRegistered && !(++updateCounter % UPDATES_PER_REPORT)) {
         console.log('consumption:', consumptionThisPeriod, 'scaled:', scaled_consumption, 'energy:', currentEnergy);
         updateCounter = 0;
@@ -944,8 +960,9 @@ const changedSnackbar = new MDCSnackbar(changed);
 const signingInSnackbar = new MDCSnackbar(signingIn);
 const registrationFailSnackbar = new MDCSnackbar(registrationFail);
 
-if (!window.speechSynthesis) { alert('This browser does not support speech!'); }
-if (!navigator.mediaDevices) { alert('This browser does not support webcams!'); }
+if (!window.speechSynthesis) alert('This browser does not support speech!');
+if (!navigator.mediaDevices) alert('This browser does not support webcams!');
+if ((location.protocol !== 'https') && (location.hostname !== 'localhost')) alert('You must use https, not http!');
 
 [
     [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
