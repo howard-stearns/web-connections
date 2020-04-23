@@ -52,10 +52,6 @@ fieldset .mdc-list .mdc-text-field,
 fieldset .mdc-list .list-item__text-field-container {
     width: 100%
 }
-.energy-reserve::before {
-    content: "+";
-}
-
 #notImplementedIndependent .mdc-dialog__content,
 .implemented li {
     color: var(--mdc-theme-secondary);

@@ -127,8 +127,6 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>FIXME: immediate todo, before larger discussion
         <ul>
-          <li>changing display name costs credits</li>
-          <li>track online off, and near x (because following you depends on it)</li>
           <li>invite url/qr code (n guests x m minutes)</li>
 
           <li>all users have accounting (registered or not), and can make changes</li>
@@ -145,19 +143,19 @@
       <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
         <ul class="implemented">
           <li class="notImplemented">All use is accounted for (registered or not).</li>
-          <li class="notImplemented">Credits are consumed by speaking, applying or resisting force, changing display name, teleporting, and by a decay of x%/interval (whether you're online or off).</li>
+          <li>Credits are consumed by speaking, applying or resisting force, changing display name, teleporting, and by a decay of x%/interval (whether you're online or off).</li>
+          <li>You also get a constant credit stipend of 60 normal-minute-use each day. With the current decay rate of 50%/day, you will find that if you log off for a few days, you'll have about 120 minutes of energy. That will take about five days if you bought anything between zero and 120 minutes on the last day in-world (e.g., to get within 5% of 120). The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.5 = 120.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the day is large enough, or it blows up otherwise.)</li>
           <li>You can change your "strength" factor at any time, making you louder or more forceful, but making you burn credits faster while speaking or applying/resisting force.</li>
           <li>You cannnot consume credits you don't have, so regardless of "strength", your volume and force per unit time will decrease as you run very low.</li>
           <li class="notImplemented">An anonymous user will dissappear from the map when their energy becomes negligable. Registered users remain (although they might fade away after a time, TBD). In any case, users do not dissapear when they close their browser.</li>
           <li>One account per person, registered on as many browsers as they want to use. (No ui to make a second registration on same browser, and registration compares faces.) A new registered user starts with 60 minutes of credit.</li>
-          <li class="notImplemented">A registered user gets paid at a constant rate, whether or not they are in-world, an amount equal to 60 minutes of normal use. They can also buy more (or perhaps contribute resources).</li>
+          <li>A registered user gets paid at a constant rate, whether or not they are in-world, an amount equal to 60 minutes of normal use. They can also buy more (or perhaps contribute resources).</li>
           <li class="notImplemented">A registered user can create a URL to be used by their choice of N people, giving them each up to M minutes of normal use. (Default 10 minutes.) It is valid only while the host is near the spot (say 100m) they were in when they created the URL. (Host can leave and come back.) QR code is the same.</li>
           <li class="notImplemented">When a user follows that link, they can sign in, or just remain anonymous. If the latter, they will only be able to speak or move for the M minutes paid for by their host. Registering or signing in does not get the unused portion of the original M minutes. However, M minutes are charged to the host as soon as any of the first N people follow the link (whether or not they are registered).</li>
           <li class="notImplemented">Pasting in a normal (non-guest) URL will show you the map, but requires you to either sign in or register.</li>
           <li class="notImplemented">Following a URL with a location (guest URL or otherwise) puts you at your last location (or a random spawn point if none, TBD), and displays a marker to guide you to the destination. You can walk in that direction, or click the marker to teleport for a fee (say, 10 min, regardless of distance).</li>
           <li class="notImplemented">All users (registered or not) can give credits to any user they are near (registered or not).</li>
-          <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
-          <li>Note: The decay is currently 50%/day. You will find that if you log off for a few days, you'll have about 120 minutes of energy. That will take about five days if you bought anything between zero and 120 minutes on the last day in-world (e.g., to get within 5% of 120). The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.5 = 120.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the day is large enough, or it blows up otherwise.)</li>
+          <li>Although this is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
         </ul>
       </p>
       <p>This demo is a real implementation of accounts, <i>except</i>:
@@ -436,7 +434,7 @@
             <div class="mdc-dialog__content" id="registration-content">
               <div class="onlyUnregistered">
                 <p>Registration is free.</p>
-                <p>Only registered users can change their display name, strength multiplier, or get more <a href="#energy">energy</a>.</p>
+                <p>Only registered users can change their strength multiplier, or get more <a href="#energy">energy</a>.</p>
               </div>
               <div class="onlyRegistered">
                 You can change any of these current settings.
@@ -460,7 +458,7 @@
                         </div>
                       </label>
                       <div class="mdc-text-field-helper-line">
-                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">displayed to other users when they are close to you</div>
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">displayed to other users when<span class="onlyUnregistered"> they are close to you</span><span class="onlyRegistered"> close - <b>changing uses 10 energy units</b></div>
                       </div>
                     </div>
                   </li>

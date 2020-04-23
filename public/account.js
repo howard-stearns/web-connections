@@ -844,6 +844,7 @@ async function openRegistration() {
         strength.value = currentStrength;
         register__submit.value = isRegistered ? "Update" : "Register";
         strength.disabled = !isRegistered;
+        displayName.disabled = isRegistered && currentEnergy < 12;
         const fields = instantiateFields(registration);
         const lists = instantiateAndLayoutLists(registration);
         updateFaceResult();

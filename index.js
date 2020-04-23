@@ -255,6 +255,7 @@ async function setUser(data, options) {
     const locks = [userid, emailKey];
     if (data.oldEmail && data.oldEmail !== data.email) locks.push(data.email);
     return promiseLock(locks, async _ => {
+        var creditChange = 0;
         if (data.oldEmail && data.email && !await getDbString(data.email)) { // Add additonal pointer if email changed.
             emailPointersToUpdate.push(data.email);
         }
@@ -262,6 +263,7 @@ async function setUser(data, options) {
         if (user) {
             await passwordFail(user, options);
             await mismatchedFaceFail(user, options);
+            if (user.displayName !== data.displayName) creditChange = Math.max(-user.credits, -10);
         } else {
             await matchesOtherFaceFail(userid, options);
             user = {};
@@ -270,11 +272,13 @@ async function setUser(data, options) {
         await addToDbSet('ids', userid);
         await Promise.all(emailPointersToUpdate.map(key => setDbString(key, userid)));
         updateMeanDescriptor(user, options);
+        updateCredits(user);
+        user.credits += creditChange;
+        user.updated = Date.now();
         Object.keys(data).forEach(key => {
             const f = transformers[key] || ((entry, existing) => existing[key] = entry);
             f(data[key], user);
         });
-        user.updated = Date.now();
         await setDbHash(userid, user);
         // Return whole user so callers can update. (Future uses might make optional.)
         return user;
