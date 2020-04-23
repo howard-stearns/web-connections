@@ -33,7 +33,7 @@
               <span class="mdc-linear-progress__bar-inner"></span>
             </div>
           </div>
-          <span id="energyReserve" class="energy-reserve">0</span>
+          <span id="energy">1.00</span>
           
           <button id="profile"
                   class="mdc-icon-button mdc-top-app-bar__action-item mdc-icon-button--on"
@@ -125,16 +125,39 @@
     <div class="mdc-drawer-scrim"></div>
     <!-- CONTENT -->
     <div class="mdc-top-app-bar--fixed-adjust">
+      <p>FIXME: immediate todo, before larger discussion
+        <ul>
+          <li>changing display name costs credits</li>
+          <li>track online off, and near x (because following you depends on it)</li>
+          <li>invite url/qr code (n guests x m minutes)</li>
+
+          <li>all users have accounting (registered or not), and can make changes</li>
+          <li>normal url (force sign in or registration, display guide)</li>
+          <li>don't allow second registration - what consequences for user selection???</li>
+
+          <li>dummy users A & B</li>
+          <li>guide marker with teleport option</li>
+
+          <li>directions for clearing browser</li>
+          <li>redis persistence (don't loose data when we restart machine)</li>
+        </ul>
+      </p>
       <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
         <ul class="implemented">
-          <li>Does not require registration to start.</li>
-          <li>You don't register just once, but on each device.</li>
-          <li>That's because it keeps track on the machine so you don't have to sign in all the time, but confirms when needed. (The model semantics for this is per a W3C draft standard.)</li>
-          <li>Tries softly to get you to register, and if you are registered, tries to get you to use your account, but you <i>can</i> be anonymous.</li>
-          <li>Always clear who you are (anonymous or otherwise), and groups account-related stuff together.</li>
+          <li class="notImplemented">All use is accounted for (registered or not).</li>
+          <li class="notImplemented">Credits are consumed by speaking, applying or resisting force, changing display name, teleporting, and by a decay of x%/interval (whether you're online or off).</li>
+          <li>You can change your "strength" factor at any time, making you louder or more forceful, but making you burn credits faster while speaking or applying/resisting force.</li>
+          <li>You cannnot consume credits you don't have, so regardless of "strength", your volume and force per unit time will decrease as you run very low.</li>
+          <li class="notImplemented">An anonymous user will dissappear from the map when their energy becomes negligable. Registered users remain (although they might fade away after a time, TBD). In any case, users do not dissapear when they close their browser.</li>
+          <li>One account per person, registered on as many browsers as they want to use. (No ui to make a second registration on same browser, and registration compares faces.) A new registered user starts with 60 minutes of credit.</li>
+          <li class="notImplemented">A registered user gets paid at a constant rate, whether or not they are in-world, an amount equal to 60 minutes of normal use. They can also buy more (or perhaps contribute resources).</li>
+          <li class="notImplemented">A registered user can create a URL to be used by their choice of N people, giving them each up to M minutes of normal use. (Default 10 minutes.) It is valid only while the host is near the spot (say 100m) they were in when they created the URL. (Host can leave and come back.) QR code is the same.</li>
+          <li class="notImplemented">When a user follows that link, they can sign in, or just remain anonymous. If the latter, they will only be able to speak or move for the M minutes paid for by their host. Registering or signing in does not get the unused portion of the original M minutes. However, M minutes are charged to the host as soon as any of the first N people follow the link (whether or not they are registered).</li>
+          <li class="notImplemented">Pasting in a normal (non-guest) URL will show you the map, but requires you to either sign in or register.</li>
+          <li class="notImplemented">Following a URL with a location (guest URL or otherwise) puts you at your last location (or a random spawn point if none, TBD), and displays a marker to guide you to the destination. You can walk in that direction, or click the marker to teleport for a fee (say, 10 min, regardless of distance).</li>
+          <li class="notImplemented">All users (registered or not) can give credits to any user they are near (registered or not).</li>
           <li>Although it is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
-          <li>It doesn't ask for a credit card until you try to buy something, even during registration.</li>
-          <li>In this implementation I have tried (and I think <i>mostly</i> succeeded,) to support two distinct users within the same browser. Having done that, I think it is a profoundly bad idea for privacy, user experience, and implementation complexity. Instead, I now recommend that if two different people want to register on the "same" browser, they should use two different operating-system-level accounts. E.g., they should switch-user in Windows or OSX, rather than switching <i>Big World</i> users. This would also have the side benefit of reinforcing the idea that people should not create multiple accounts.</li>
+          <li>Note: The decay is currently 50%/day. You will find that if you log off for a few days, you'll have about 120 minutes of energy. That will take about five days if you bought anything between zero and 120 minutes on the last day in-world (e.g., to get within 5% of 120). The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.5 = 120.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the day is large enough, or it blows up otherwise.)</li>
         </ul>
       </p>
       <p>This demo is a real implementation of accounts, <i>except</i>:
@@ -203,55 +226,6 @@
           <li>So, that leaves passwords. There's a W3C browser API for managing that in a sensible way, which I've used where it exists. Alas, it doesn't exist on Firefox or Safari yet, so I've simulated it myself. This is what you see in the demo on these browsers. <i>However...</i> to do, I've stored the user's password in site-specific storage in the browser, rather than in the non-existent password credential manager. Is anyone going to freak about that? The alternative is to not save the password in my storage, but instead make the user enter the password each time in a form, which will be autofilled from the browser anyway. I've implemented that, too, so that you can compare. Go to <a href="https://web-connections.herokuapp.com/account.html?store-passwords=false">/account.html?store-passwords=false</a> to try out that version.</li>
         </ol>
       </p>
-    </div>
-
-    <div id="loggedOut" class="mdc-snackbar">
-      <div class="mdc-snackbar__surface">
-        <div class="mdc-snackbar__label"
-             role="status"
-             aria-live="polite">
-          Signed out.
-        </div>
-        <div class="mdc-snackbar__actions">
-          <button type="button" class="mdc-button mdc-snackbar__action">
-            <span class="mdc-button__label">Sign in</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="signingIn" class="mdc-snackbar">
-      <div class="mdc-snackbar__surface">
-        <div class="mdc-snackbar__label"
-             role="status"
-             id="signingIn__label"
-             aria-live="polite"></div>
-        <div class="mdc-snackbar__actions">
-          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
-        </div>
-      </div>
-    </div>
-    <div id="changed" class="mdc-snackbar">
-      <div class="mdc-snackbar__surface">
-        <div class="mdc-snackbar__label"
-             id="changed__label"
-             role="status"
-             aria-live="polite"></div>
-        <div class="mdc-snackbar__actions">
-          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
-        </div>
-      </div>
-    </div>
-    <div id="registrationFail" class="mdc-snackbar mdc-snackbar--stacked">
-      <div class="mdc-snackbar__surface">
-        <div class="mdc-snackbar__label"
-             role="status"
-             aria-live="polite">
-        </div>
-        <div class="mdc-snackbar__actions">
-          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
-        </div>
-      </div>
     </div>
     
     <!-- Dialogs  -->
@@ -616,6 +590,56 @@
         </div>
       </div>
       <div class="mdc-dialog__scrim"></div>
+    </div>
+
+    <!-- SNACKBARS are last so they are on top of all -->
+    <div id="loggedOut" class="mdc-snackbar">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             role="status"
+             aria-live="polite">
+          Signed out.
+        </div>
+        <div class="mdc-snackbar__actions">
+          <button type="button" class="mdc-button mdc-snackbar__action">
+            <span class="mdc-button__label">Sign in</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="signingIn" class="mdc-snackbar">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             role="status"
+             id="signingIn__label"
+             aria-live="polite"></div>
+        <div class="mdc-snackbar__actions">
+          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="changed" class="mdc-snackbar">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             id="changed__label"
+             role="status"
+             aria-live="polite"></div>
+        <div class="mdc-snackbar__actions">
+          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="registrationFail" class="mdc-snackbar mdc-snackbar--stacked">
+      <div class="mdc-snackbar__surface">
+        <div class="mdc-snackbar__label"
+             role="status"
+             aria-live="polite">
+        </div>
+        <div class="mdc-snackbar__actions">
+          <button class="material-icons mdc-icon-button mdc-snackbar__action">cancel</button>
+        </div>
+      </div>
     </div>
     
     <script src="account.js"></script>

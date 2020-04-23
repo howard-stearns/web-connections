@@ -165,8 +165,7 @@ function trimUser(user) { // What gets returned to user. FIXME: determine the mi
     const cred = Object.assign({}, user);
     cred.faces = cred.faces.slice(-1);
     if (!cred.strength) cred.strength = 1;
-    if (!('credits' in cred)) cred.credits = 1;
-    return cred;
+    return updateCredits(user);
 }
 
 function listify(entry, existingKey, existing) {
@@ -184,7 +183,7 @@ const transformers = {
     email: makeTransformer('emails'),
     oldEmail: _ => {},
     face: makeTransformer('faces'),
-    credits: (entry, existing) => { existing.credits = (existing.credits || 1) + entry; },
+    credits: (entry, existing) => { existing.credits = (existing.credits || 1) + entry; }, // FIXME!!
     energy: (entry, existing) => { existing.credits = entry; }
 };
 
@@ -275,6 +274,7 @@ async function setUser(data, options) {
             const f = transformers[key] || ((entry, existing) => existing[key] = entry);
             f(data[key], user);
         });
+        user.updated = Date.now();
         await setDbHash(userid, user);
         // Return whole user so callers can update. (Future uses might make optional.)
         return user;
@@ -493,6 +493,38 @@ async function computeDescriptor(url) {
     return [...final.descriptor]; // spread to a normal array
 }
 
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const STIPEND_PER_DAY = 60;
+const DECAY_PER_DAY = -0.5;
+const DECAY_COMPOUNDINGS_PER_DAY = 1;
+function computeCreditsOnInterval(principle, ms) {
+    const t = ms / MILLISECONDS_PER_DAY;
+    const rateAtCompounding = DECAY_PER_DAY / DECAY_COMPOUNDINGS_PER_DAY; // r/n in financial formulas
+    const nCompoundings = DECAY_COMPOUNDINGS_PER_DAY * t;                // n*t in financial formulas
+    const compoundGrowth = Math.pow(1 + rateAtCompounding, nCompoundings); // (1 + r/n)^(nt)
+    const compoundInterestForPrinciple = principle * compoundGrowth;
+    const futureValueOfASeries = STIPEND_PER_DAY * (compoundGrowth - 1) / rateAtCompounding;
+    return compoundInterestForPrinciple + futureValueOfASeries;
+}
+
+// FIXME NOT USED YET: const MINIMUM_OFFLINE_TIME = 20 * 1000; // /reportEnergy is every 15 seconds.
+// Pending credits (purchases, stipend, and decay) are only updated when the user has been offline.
+function updateCredits(user) {
+    const now = Date.now();
+    if (!('credits' in user)) {
+        cred.credits = STIPEND_PER_DAY;
+        cred.updated = now;
+    }
+    const elapsed = now - user.creditsUpdated;
+    const principle = ('credits' in user) ? user.credits : 60;
+    // FIXME: If you buy credits and those are not applied until you are offline, or if you can by while
+    // offline through another interface, then we need to to divide elapsed into 1+ nPurchases, and compute
+    // compoundCreditsOnInterval with the previous principle (including purchases) and the elapsed
+    // for that principle to the next.
+    if (elapsed > 100) user.credits = computeCreditsOnInterval(principle, elapsed);
+    console.log('updateCredits', user.displayName, principle, user.credits);
+    return user;
+}
 
 function promiseResponse(res, promise) {
     return promise
@@ -520,7 +552,7 @@ app.post('/login', function (req, res) {
     promiseResponse(res,
                     id
                     ? getUser(id, {auth: password}).then(trimUser)
-                    : Promise.resolve({name: uniqueNamesGenerator(namesConfig), strength: 1, credits: 1}));
+                    : Promise.resolve({name: uniqueNamesGenerator(namesConfig), strength: 1, credits: 10}));
 });
 app.post('/delete', function (req, res) {
     const {id, password} = req.body;

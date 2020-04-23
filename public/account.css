@@ -56,14 +56,16 @@ fieldset .mdc-list .list-item__text-field-container {
     content: "+";
 }
 
-#notImplementedDependent .mdc-dialog__content,
-i.notImplementedDependent,
-.notImplementedDependent li {
-    color: var(--mdc-theme-error);
-}
 #notImplementedIndependent .mdc-dialog__content,
 .implemented li {
     color: var(--mdc-theme-secondary);
+}
+
+#notImplementedDependent .mdc-dialog__content,
+i.notImplementedDependent,
+li.notImplemented,
+.notImplementedDependent li {
+    color: var(--mdc-theme-error);
 }
 
 .mdc-linear-progress__bar-inner {

@@ -224,7 +224,7 @@ function purchase({id, credits}) {
         if (credential.id !== id) return Promise.reject(new Error("Changed user from ${id} to ${credential.id}."));
         credential.credits = credits;
         service('/purchase', credential, credential)
-            .then(handleLoginResult);
+            .then(handleLoginResult); // FIXME: this part might be confusing if purchases are not applied right away
     });
 }
 
@@ -857,42 +857,59 @@ async function openRegistration() {
 const MAX_STRENGTH = Number.parseInt(strength.getAttribute('max')); // Consume up to N times normal rate.
 const ENERGY_INTERVAL_MS = 100; // How often do we sample energy use.
 const UPDATES_PER_REPORT = 15 * 1000 / ENERGY_INTERVAL_MS;  // Every 15 seconds
-// Registered users have N minutes use replenished each day. Anonymous will run out in that time.
-const USE_TIME_MS = 10 * 60 * 1000;  // 10 minutes for demo purposes.
-const AVERAGE_NORMAL_CONSUMPTION_PER_INTERVAL = 0.5; // With our random "meter", below.
-const REPLENISHMENT_PER_INTERVAL = ENERGY_INTERVAL_MS / (USE_TIME_MS * AVERAGE_NORMAL_CONSUMPTION_PER_INTERVAL);
+
+// FIXME: this section of code is identical to server. Should split into a module with webpack so that there's a single source.
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const STIPEND_PER_DAY = 60;
+const DECAY_PER_DAY = -0.5;
+const DECAY_COMPOUNDINGS_PER_DAY = 1;
+function computeCreditsOnInterval(principle, ms) {
+    const t = ms / MILLISECONDS_PER_DAY;
+    const rateAtCompounding = DECAY_PER_DAY / DECAY_COMPOUNDINGS_PER_DAY; // r/n in financial formulas
+    const nCompoundings = DECAY_COMPOUNDINGS_PER_DAY * t;                // n*t in financial formulas
+    const compoundGrowth = Math.pow(1 + rateAtCompounding, nCompoundings); // (1 + r/n)^(nt)
+    const compoundInterestForPrinciple = principle * compoundGrowth;
+    const futureValueOfASeries = STIPEND_PER_DAY * (compoundGrowth - 1) / rateAtCompounding;
+    return compoundInterestForPrinciple + futureValueOfASeries;
+}
+
+const AVERAGE_ENERGY_UNITS_CONSUMED_PER_HOUR = 60;
+const INTERVALS_PER_HOUR = 60 * 60 * 1000 / ENERGY_INTERVAL_MS;
+const AVERAGE_ENERGY_UNITS_CONSUMED_PER_INTERVAL = AVERAGE_ENERGY_UNITS_CONSUMED_PER_HOUR / INTERVALS_PER_HOUR;
+const LINEAR_CONSUMPTION_METER_AVERAGE = 0.5;
+const LINEAR_CONSUMPTION_METER_UNITS = AVERAGE_ENERGY_UNITS_CONSUMED_PER_INTERVAL / LINEAR_CONSUMPTION_METER_AVERAGE;
+// Sanity check: LINEAR_CONSUMPTION_METER_UNITS * LINEAR_CONSUMPTION_METER_AVERAGE * INTERVALS_PER_HOUR ~= AVERAGE_ENERGY_UNITS_CONSUMED_PER_HOUR
+
 const consumptionBuffer = Array(5).fill(0);
 const energyBuffer = Array(5 * 1000 / ENERGY_INTERVAL_MS).fill(0);
-var currentEnergy = 1;
+var currentEnergy = 0;
 var currentStrength = 1;
 var updateCounter = 0;
 function average(array) {
     return array.reduce((acc, amount) => acc + amount, 0) / array.length;
 }
+function windowedAverage(amount, array) {
+    array.shift();
+    array.push(amount);
+    return average(array);
+}
+function formatCredits(energy) {
+    return (energy > 1000) ? energy.toFixed() : energy.toPrecision(3);
+}
 function updateEnergy() {
-    // Should we stretch out the tail by limiting the consumptionThisPeriod to be no more than currentEnergy?
-    const consumptionThisPeriod = Math.min(currentEnergy, currentStrength * Math.random()); // FIXME
-    const scaled_consumption = consumptionThisPeriod * REPLENISHMENT_PER_INTERVAL;
-    currentEnergy = currentEnergy - scaled_consumption;
-    if (isRegistered)
-        currentEnergy = currentEnergy + REPLENISHMENT_PER_INTERVAL / 2;
+    var meterThisPeriod = currentStrength * Math.random();  // FIXME
+    const consumptionThisPeriod = Math.max(0, Math.min(currentEnergy, meterThisPeriod * LINEAR_CONSUMPTION_METER_UNITS));
+    currentEnergy = computeCreditsOnInterval(currentEnergy, ENERGY_INTERVAL_MS) - consumptionThisPeriod;
+
     // FIXME: actual /reportEnergy should be done by a mixer with proper auth, not the client.
+    // FIXME: should be randomized a bit to avoid synchronization
     if (isRegistered && !(++updateCounter % UPDATES_PER_REPORT)) {
-        console.log('consumption:', consumptionThisPeriod, 'scaled:', scaled_consumption, 'energy:', currentEnergy);
         updateCounter = 0;
         service('/reportEnergy', {id: isRegistered, energy: currentEnergy});
     }
-    // Consumption is averaged and shown as the fraction of MAX_STRENGTH;
-    consumptionBuffer.shift();
-    consumptionBuffer.push(consumptionThisPeriod / MAX_STRENGTH);
-    energyBarLinearProgress.progress = average(consumptionBuffer);
-    // Energy is averaged and shown as the fraction part in linear progress "buffer", and the amount over 1 as the reserve.
-    energyBuffer.shift();
-    energyBuffer.push(currentEnergy);
-    const averageEnergy = average(energyBuffer);
-    const reserve = Math.floor(averageEnergy); // amount above 1
-    energyReserve.innerHTML = reserve;
-    energyBarLinearProgress.buffer = averageEnergy - reserve;
+    energyBarLinearProgress.progress = windowedAverage(meterThisPeriod / MAX_STRENGTH, consumptionBuffer);
+    const averageEnergy = windowedAverage(currentEnergy, energyBuffer);
+    energy.innerText = formatCredits(averageEnergy);
 }
 function gotoHash(x) {
     const hash = location.hash;
@@ -908,7 +925,7 @@ function gotoHash(x) {
     is('#registration') ? openRegistration() : closeRegistration();
     switch (location.hash) {
     case '#energy':
-        energyAmount.innerText = Math.round(currentEnergy * 100).toFixed();
+        energyAmount.innerText = formatCredits(currentEnergy);
         break;
     case '#login':
         logIn();
