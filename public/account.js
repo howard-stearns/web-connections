@@ -941,7 +941,7 @@ const UPDATES_PER_REPORT = 15 * 1000 / ENERGY_INTERVAL_MS;  // Every 15 seconds
 // FIXME: this section of code is identical to server. Should split into a module with webpack so that there's a single source.
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const STIPEND_PER_DAY = 60;
-const DECAY_PER_DAY = -0.5;
+const DECAY_PER_DAY = -0.075;
 const DECAY_COMPOUNDINGS_PER_DAY = 1;
 function computeCreditsOnInterval(principle, ms) {
     const t = ms / MILLISECONDS_PER_DAY;
@@ -984,8 +984,14 @@ function reportUserStats() {
     if (mapLocation) data.location = mapLocation;
     service('/updateUserStats', data);
 }
+var muted = false;
+function toggleMuted() {
+    muted = !muted;
+    toggleTalking.innerText = muted ? "start talking" : "stop talking";
+}
+
 function updateEnergy() {
-    var meterThisPeriod = currentStrength * Math.random();  // FIXME
+    var meterThisPeriod = muted ? 0 : currentStrength * Math.random();  // FIXME
     const consumptionThisPeriod = Math.max(0, Math.min(currentEnergy, meterThisPeriod * LINEAR_CONSUMPTION_METER_UNITS));
     currentEnergy = computeCreditsOnInterval(currentEnergy, ENERGY_INTERVAL_MS) - consumptionThisPeriod;
 
@@ -1033,6 +1039,10 @@ function gotoHash(x) {
     case '#demo2':
         service('/updateUserStats', {id: fixmeDemoFollowId, location: {x: 2000, y: 2000}})
             .then(_ => { demoHostPosition = "demo link to position 2"; location.hash = ''; });
+        break;
+    case '#toggleTalking':
+        toggleMuted();
+        location.hash = '';
         break;
     case '#destinationGuide':
         guide.blur();

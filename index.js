@@ -566,7 +566,7 @@ async function computeDescriptor(url) {
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const STIPEND_PER_DAY = 60;
-const DECAY_PER_DAY = -0.5;
+const DECAY_PER_DAY = -0.075;
 const DECAY_COMPOUNDINGS_PER_DAY = 1;
 function computeCreditsOnInterval(principle, ms) {
     const t = ms / MILLISECONDS_PER_DAY;
