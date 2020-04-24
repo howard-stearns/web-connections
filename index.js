@@ -2,6 +2,7 @@
 const PORT = process.env.PORT || 8443;
 const path = require('path');
 const fs = require('fs');
+const url = require('url');
 const express = require('express');
 const bodyParser = require('body-parser');
 const https = require('https'); // for forwarding to hifi-telemetric
@@ -27,6 +28,23 @@ const namesConfig = {
     dictionaries: [adjectives, colors, animals],
     style: 'capitol'
 };
+function logParams(req, parameterNames) {
+    if (!parameterNames.length) return;
+    const index = req.url.indexOf('?'), searchIndex = index < 0 ? req.url.length : index, body = req.body;
+    const params = new url.URLSearchParams(req.url.slice(searchIndex));
+    function frob(value) {
+        if (typeof value === 'number') return Math.round(value);
+        if (typeof value === 'object') {
+            let copy = ""
+            Object.keys(value).forEach(key => copy += '-' + key + '_' + frob(value[key]))
+            copy += "";
+            return copy;
+        }
+        return value;
+    }
+    parameterNames.forEach(name => (name in body) && params.set(name, frob(body[name])));
+    req.originalUrl = req.url.slice(0, searchIndex) + '?' + params;
+}
 
 if (redis) redis.on('error', console.error);
 
@@ -165,7 +183,7 @@ function trimUser(user) { // What gets returned to user. FIXME: determine the mi
     const cred = Object.assign({}, user);
     cred.faces = cred.faces.slice(-1);
     if (!cred.strength) cred.strength = 1;
-    return updateCredits(user);
+    return user;
 }
 
 function listify(entry, existingKey, existing) {
@@ -182,9 +200,7 @@ function makeTransformer(existingKey) {
 const transformers = {
     email: makeTransformer('emails'),
     oldEmail: _ => {},
-    face: makeTransformer('faces'),
-    credits: (entry, existing) => { existing.credits = (existing.credits || 1) + entry; }, // FIXME!!
-    energy: (entry, existing) => { existing.credits = entry; }
+    face: makeTransformer('faces')
 };
 
 function passwordFail(user, options) {
@@ -255,32 +271,77 @@ async function setUser(data, options) {
     const locks = [userid, emailKey];
     if (data.oldEmail && data.oldEmail !== data.email) locks.push(data.email);
     return promiseLock(locks, async _ => {
-        var creditChange = 0;
+        var newCharges = 0;
         if (data.oldEmail && data.email && !await getDbString(data.email)) { // Add additonal pointer if email changed.
             emailPointersToUpdate.push(data.email);
         }
         var user = await getDbHash(userid);
+        const fixmeDemoMarker = '@demo.fixme';
         if (user) {
             await passwordFail(user, options);
             await mismatchedFaceFail(user, options);
-            if (user.displayName !== data.displayName) creditChange = Math.max(-user.credits, -10);
+            if ((data.displayName !== undefined) && (user.displayName !== data.displayName)) {
+                newCharges += 10;
+            }
+            if (data.invite && !emailKey.endsWith(fixmeDemoMarker)) newCharges += data.followers * data.energy;
+            if (data.purchase) {
+                newCharges -= data.purchase; // FIXME: needs bank auth
+                delete data.purchase;
+            }
         } else {
             await matchesOtherFaceFail(userid, options);
             user = {};
+            if (!data.email.endsWith(fixmeDemoMarker)) {
+                user.x = Math.floor(Math.random() * 1000);
+                user.y = Math.floor(Math.random() * 1000);
+                let fixme = await setUser({
+                    name: uniqueNamesGenerator(namesConfig),
+                    email: userid + fixmeDemoMarker,
+                    x: 100,
+                    y: 100
+                }, {});
+                user.demoFollowName = fixme.name;
+                user.demoFollowId = fixme.emails[0];
+            }
         }
-        // Can't be done before security checks, else people could steal addresses.
+        var credits = computeCurrentCredits(user);
+        // FIXME: Is there enough info for the user? What charges? What is my current balance? Does energy indicator reflect that?
+        if (credits < newCharges) throw new Error("Insufficient credits.");
+        data.credits = credits - newCharges;
+        data.updated = Date.now();
+        var destination;
+        if (data.destination) {
+            const invite = await getDbHash(data.destination);
+            if (!invite) throw new Error(`No such invitation ${data.destination}.`);
+            const host = await getDbHash(invite.userid);
+            if (!host) throw new Error(`No host for invitation ${data.destination}.`);
+            // FIXME: count down invite.remaining, but don't double count reloads.
+            // FIXME: check that host.x/y is near invite.x/y, and still online
+            destination = {x: host.x, y: host.y, name: host.name};
+            delete data.destination;
+        }
+        // Can't be done before security checks.
+        var href;
+        if (data.invite) {
+            const inviteKey = uuidv4();
+            const {followers:remaining, energy} = data.invite;
+            await addToDbSet('invites', inviteKey);
+            await setDbHash(inviteKey, {remaining, energy, userid: userid, x: user.x, y: user.y});
+            // FIXME? We will probably want to also keep track of the invites of each user.
+            href = options.base + `?invite=${inviteKey}`;
+            delete data.invite;
+        }
         await addToDbSet('ids', userid);
         await Promise.all(emailPointersToUpdate.map(key => setDbString(key, userid)));
         updateMeanDescriptor(user, options);
-        updateCredits(user);
-        user.credits += creditChange;
-        user.updated = Date.now();
         Object.keys(data).forEach(key => {
             const f = transformers[key] || ((entry, existing) => existing[key] = entry);
             f(data[key], user);
         });
         await setDbHash(userid, user);
         // Return whole user so callers can update. (Future uses might make optional.)
+        if (href) user.href = href;
+        if (destination) user.destination = destination;
         return user;
     });
 }
@@ -301,6 +362,7 @@ function deleteUser(email, options) {
         .then(user => promiseLock(email, _ => {
             return getDbString(email).then(userid => {
                 return Promise.all(user.emails.map(id => removeDbString(id)))
+                    .then(_ => user.demoFollowId && deleteUser(user.demoFollowId, {}))
                     .then(_ => removeDbHash(userid))
                     .then(_ => removeFromDbSet('ids', userid))
                     .then(_ => ({}));
@@ -308,6 +370,11 @@ function deleteUser(email, options) {
         }));
 }
 
+function createInvite({email, followers = 1, energy = 10}, options) {
+    if (followers < 1) return Promise.reject("Invites must provide for at least one follower.");
+    if (energy < 10) return Promise.reject("Invites must provide for at least 10 minutes energy.");
+    return setUser({email, invite: {followers, energy}}, options);
+}
 
 app.use(logger);
 app.use(express.static('public'));
@@ -512,22 +579,18 @@ function computeCreditsOnInterval(principle, ms) {
 }
 
 // FIXME NOT USED YET: const MINIMUM_OFFLINE_TIME = 20 * 1000; // /reportEnergy is every 15 seconds.
-// Pending credits (purchases, stipend, and decay) are only updated when the user has been offline.
-function updateCredits(user) {
+// Does not side-effect user.
+function computeCurrentCredits(user) {
     const now = Date.now();
-    if (!('credits' in user)) {
-        cred.credits = STIPEND_PER_DAY;
-        cred.updated = now;
-    }
-    const elapsed = now - user.creditsUpdated;
-    const principle = ('credits' in user) ? user.credits : 60;
+    var {credits = STIPEND_PER_DAY, updated = now} = user;
+    const elapsed = now - user.updated;
     // FIXME: If you buy credits and those are not applied until you are offline, or if you can by while
     // offline through another interface, then we need to to divide elapsed into 1+ nPurchases, and compute
     // compoundCreditsOnInterval with the previous principle (including purchases) and the elapsed
     // for that principle to the next.
-    if (elapsed > 100) user.credits = computeCreditsOnInterval(principle, elapsed);
-    console.log('updateCredits', user.displayName, principle, user.credits);
-    return user;
+    if (elapsed < 100) return credits;
+    const computed = computeCreditsOnInterval(credits, elapsed);
+    return computed;
 }
 
 function promiseResponse(res, promise) {
@@ -543,6 +606,7 @@ function promiseResponse(res, promise) {
 }
 app.post('/registration', function (req, res) {
     // Explicitly deconstruct and reconstruct the credential, so that we don't accidentally include, e.g., credits.
+    logParams(req, ['email']);
     const {id, oldEmail, name, iconURL, password, oldPassword, strength} = req.body;
     promiseResponse(res,
                     computeDescriptor(iconURL).then(descriptor => {
@@ -552,26 +616,45 @@ app.post('/registration', function (req, res) {
                     }));
 });
 app.post('/login', function (req, res) {
-    const {id, password} = req.body;
+    logParams(req, ['id', 'destination']);
+    const {id, destination, password} = req.body;
+    const data = {email: id};
+    if (destination) data.destination = destination;
     promiseResponse(res,
                     id
-                    ? getUser(id, {auth: password}).then(trimUser)
+                    ? setUser(data, {auth: password}) // setUser to side-effect activity, get reflect current credits info
                     : Promise.resolve({name: uniqueNamesGenerator(namesConfig), strength: 1, credits: 10}));
 });
 app.post('/delete', function (req, res) {
+    logParams(req, ['id']);
     const {id, password} = req.body;
     promiseResponse(res, deleteUser(id, {auth: password}));
 });
 
 app.post('/purchase', function (req, res) {
-    const {id, password, credits} = req.body;
-    promiseResponse(res, setUser({email:id, credits}, {auth: password}));
+    logParams(req, ['id', 'purchase']);
+    const {id, password, purchase} = req.body;
+    promiseResponse(res, setUser({email:id, purchase}, {auth: password}));
 });
 
-app.post('/reportEnergy', function (req, res) {
+app.post('/createInvite', function (req, res) {
+    logParams(req, ['id', 'followers', 'energy']);
+    const {id, password, energy, followers} = req.body;
+    const base = `${req.protocol}://${req.get('host')}/account.html`;
+    promiseResponse(res, createInvite({email:id, energy, followers}, {auth: password, base}));
+});
+
+app.post('/updateUserStats', function (req, res) {
     // FIXME: should check that this is coming from our server (e.g., audio mixer).
-    const {id, energy} = req.body;
-    promiseResponse(res, setUser({email:id, energy}, {}));
+    logParams(req, ['energy', 'location']);
+    const {id, energy, location} = req.body;
+    const data = {email:id};
+    if (location) {
+        data.x = location.x;
+        data.y = location.y;
+    }
+    if (energy !== undefined) data.credits = energy;
+    promiseResponse(res, setUser(data, {}));
 });
 
 

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>Web Connections Test</title>
+    <title>Big World account demo</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css">
@@ -23,6 +23,8 @@
         </section>
         
         <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-end mdc-menu-surface--anchor" role="toolbar">
+          <button id="guide" class="hidden material-icons mdc-top-app-bar__navigation-icon mdc-icon-button">explore</button>
+
           <div id="energyBar" role="progressbar" class="mdc-linear-progress">
             <div class="mdc-linear-progress__buffering-dots"></div>
             <div class="mdc-linear-progress__buffer"></div>
@@ -86,13 +88,9 @@
             <i class="material-icons mdc-list-item__graphic" aria-hidden="true">add_to_home_screen</i> <!-- system_update -->
             <span class="mdc-list-item__text">Add to home screen</span>
           </a>
-          <a class="mdc-list-item" href="#notImplementedDependent">
-            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">center_focus_weak</i>
-            <span class="mdc-list-item__text">Share by QR code</span>
-          </a>
-          <a class="mdc-list-item" href="#notImplementedIndependent">
-            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">explore</i>
-            <span class="mdc-list-item__text">Something app-specific</span>
+          <a class="mdc-list-item" href="#share">
+            <i class="material-icons mdc-list-item__graphic" aria-hidden="true">share</i> <!-- center_focus_weak -->
+            <span class="mdc-list-item__text">Create invite link/QR code</span>
           </a>
           <a class="mdc-list-item" href="#notImplementedIndependent">
             <i class="material-icons mdc-list-item__graphic" aria-hidden="true">wc</i>
@@ -127,46 +125,59 @@
     <div class="mdc-top-app-bar--fixed-adjust">
       <p>FIXME: immediate todo, before larger discussion
         <ul>
-          <li>invite url/qr code (n guests x m minutes)</li>
-
           <li>all users have accounting (registered or not), and can make changes</li>
           <li>normal url (force sign in or registration, display guide)</li>
           <li>don't allow second registration - what consequences for user selection???</li>
 
-          <li>dummy users A & B</li>
-          <li>guide marker with teleport option</li>
-
           <li>directions for clearing browser</li>
-          <li>redis persistence (don't loose data when we restart machine)</li>
+          <li>redis db (and remove redis in todo below)</li>
         </ul>
       </p>
+      <h3>Demo Stuff</h3>
+      <p>For demonstration purposes, there is a test user named '<span id="demoHostname1">host name</span>', perhaps representing a friend, or an artist that you follow IRL. (You are currently '<span id="demoYourOwnName">your name</span>'.) You can do four things relating to the test user:
+        <ul>
+          <li>
+            <a href="#createDemoLink">Create a demo link</a> that behaves as if <span id="demoHostname2">host name</span> had used their
+            <i class="material-icons">menu</i>
+            <i class="material-icons">arrow_right_alt</i>
+            <i class="material-icons">share</i>
+            (above) while at their current position, and given you the URL.
+          </li>
+          <li>Follow that <a id="demoLink">demo link (not created yet) to position ?<a></li>
+          <li>Move <span id="demoHostname3">host name</span> to <a href="#demo1">position 1</a>.</li>
+          <li>Move <span id="demoHostname4">host name</span> to <a href="#demo2">postion 2</a>.</li>
+        </ul>
+      </p>
+
+      <h3>The Rules</h3>
       <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
         <ul class="implemented">
           <li class="notImplemented">All use is accounted for (registered or not).</li>
           <li>Credits are consumed by speaking, applying or resisting force, changing display name, teleporting, and by a decay of x%/interval (whether you're online or off).</li>
-          <li>You also get a constant credit stipend of 60 normal-minute-use each day. With the current decay rate of 50%/day, you will find that if you log off for a few days, you'll have about 120 minutes of energy. That will take about five days if you bought anything between zero and 120 minutes on the last day in-world (e.g., to get within 5% of 120). The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.5 = 120.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the day is large enough, or it blows up otherwise.)</li>
+          <li>You also get a constant credit stipend of 60 normal-minute-use each day. With the current decay rate of 50%/day, you will find that if you log off for a few days, you'll have about 120 minutes of energy. That will take about five days if you bought anything between zero and 120 minutes on the last day in-world (e.g., to get within 5% of 120). The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.5 = 120.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the day is large enough, or it blows up otherwise.)</i></li>
           <li>You can change your "strength" factor at any time, making you louder or more forceful, but making you burn credits faster while speaking or applying/resisting force.</li>
           <li>You cannnot consume credits you don't have, so regardless of "strength", your volume and force per unit time will decrease as you run very low.</li>
           <li class="notImplemented">An anonymous user will dissappear from the map when their energy becomes negligable. Registered users remain (although they might fade away after a time, TBD). In any case, users do not dissapear when they close their browser.</li>
           <li>One account per person, registered on as many browsers as they want to use. (No ui to make a second registration on same browser, and registration compares faces.) A new registered user starts with 60 minutes of credit.</li>
           <li>A registered user gets paid at a constant rate, whether or not they are in-world, an amount equal to 60 minutes of normal use. They can also buy more (or perhaps contribute resources).</li>
           <li class="notImplemented">A registered user can create a URL to be used by their choice of N people, giving them each up to M minutes of normal use. (Default 10 minutes.) It is valid only while the host is near the spot (say 100m) they were in when they created the URL. (Host can leave and come back.) QR code is the same.</li>
-          <li class="notImplemented">When a user follows that link, they can sign in, or just remain anonymous. If the latter, they will only be able to speak or move for the M minutes paid for by their host. Registering or signing in does not get the unused portion of the original M minutes. However, M minutes are charged to the host as soon as any of the first N people follow the link (whether or not they are registered).</li>
+          <li class="notImplemented">When a user follows that link, they can sign in, or just remain anonymous. If the latter, they will only be able to speak or move for the M minutes paid for by their host. Registering or signing in does not get the unused portion of the original M minutes. However, N * M minutes are charged to the host as soon as they create the link (whether or not the eventual followers are registered).</li>
           <li class="notImplemented">Pasting in a normal (non-guest) URL will show you the map, but requires you to either sign in or register.</li>
-          <li class="notImplemented">Following a URL with a location (guest URL or otherwise) puts you at your last location (or a random spawn point if none, TBD), and displays a marker to guide you to the destination. You can walk in that direction, or click the marker to teleport for a fee (say, 10 min, regardless of distance).</li>
+          <li>Following a URL with a location (guest URL or otherwise) puts you at your last location (or a random spawn point if none, TBD), and displays a marker to guide you to the destination. You can walk in that direction, or click the marker to teleport for a fee (say, 10 min, regardless of distance).</li>
           <li class="notImplemented">All users (registered or not) can give credits to any user they are near (registered or not).</li>
           <li>Although this is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
         </ul>
       </p>
+      <h3>Much more to to do</h3>
       <p>This demo is a real implementation of accounts, <i>except</i>:
         <ul class="notImplemented">
           <li>Scaling:
             <ul>
-              <li>internal server db (redis instead of in-memory that is lost when server shuts down)</li>
+              <li>internal server db (redis instead of file-system-based hack db)</li>
               <li>move to highfidelity.co? aws?</li>
               <li>scale up energy and face check</li>
               <li>unit tests</li>
-              <li>less data trasnfer (currently sending "everything" back and forth between client and server)</li>
+              <li>less data transfer (currently sending "everything" back and forth between client and server)</li>
               <li>code cleanup</li>
               <li>scale internal client db (localStorage is fine for now, but indexDb is better)</li>
             </ul>
@@ -211,6 +222,7 @@
         <li>Try browser refresh and back/forward in various cases. There are some very subtle cases when the browser has multiple accounts stored.</li>
       </ol>
       -->
+      <h3>Passwords and Login</h3>
       <p>Quick discussion of passwords:
         <ol>
           <li>There is a W3C browser API, that everyone seems to support, for working with hardware keys. That is, instead of a password, a user can tap their separate Near-Field Communication keyfob device as authentication, or touch the fingerprint id on a MacBook touchbar. The model here is compatible with the use of this API, but I didn't bother to do so because:
@@ -301,6 +313,110 @@
       <div class="mdc-dialog__scrim"></div>
     </div>
 
+    <div id="destinationGuide" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface" role="alertdialog">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title">Destination</h2>
+          <div class="mdc-dialog__content">
+            <p>You have been invited by <span id="destinationHost"></span> to visit near <span id="destinationLocation"></span>, but you are at <span id="yourLocation"></span>.</p>
+            <p>The guide isn't implemented yet. In the app, it should point you in the right direction, and give you the distance.</p>
+            <p>You also have the option to teleport there directly for a cost of 10 energy units.</p>
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="cancel">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">OK</span>
+            </button>
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">teleport</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+
+    <div id="share" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface" role="alertdialog">
+          <h2 class="mdc-dialog__title">Share</h2>
+          <div class="mdc-dialog__content">
+            <p class="onlyShareRegistered">This URL (in this QR code and Copy Link button) can only be followed by <i>registered</i> users. You can also sponsor <i>new</i> users using the form below.</p>
+            <p class="onlyShareAnyone">This QR code and Copy Link button are for anyone.</p>
+            <div id="qr"></div>
+
+            <textarea id="inviteUrl" readonly></textarea>
+
+            <button id="copyUrl" class="mdc-button">
+              <div class="mdc-button__ripple"></div>
+              <i class="material-icons mdc-button__icon" aria-hidden="true">file_copy</i>
+              <span class="mdc-button__label">Copy Link</span>
+            </button>
+
+            <p class="onlyUnregistered">You can only <i>sponsor</i> new users if you are <a href="#registration">registered</a>.</p>
+            <form id="share__form">
+              <fieldset id="share__fieldset">
+                <legend class="mdc-typography mdc-typography--body2">Sponsored Users</legend>
+                <ul class="mdc-list list--floating-height">
+
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="nFollowers__label" class="mdc-text-field mdc-text-field--outlined" for="nFollowers">
+                        <input id="nFollowers" type="number" class="mdc-text-field__input" aria-labelledby="nFollowers__floatingLabel" autocomplete="nickname given-name name" required min="1" step="1" tabindex="0" value="1">
+                        <div id="nFollowers__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="nFollowers__floatingLabel" class="mdc-floating-label">Number of Followers</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                      <div class="mdc-text-field-helper-line">
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">the number of people who can follow the link</div>
+                      </div>
+                    </div>
+                  </li>
+
+                  <li class="mdc-list-item">
+                    <div class="list-item__text-field-container">
+                      <label id="followerCredits__label" class="mdc-text-field mdc-text-field--outlined" for="followerCredits">
+                        <input id="followerCredits" type="number" class="mdc-text-field__input" aria-labelledby="followerCredits__floatingLabel" autocomplete="nickname given-name name" required min="10" step="1" value="10">
+                        <div id="followerCredits__outline" class="mdc-notched-outline">
+                          <div class="mdc-notched-outline__leading"></div>
+                          <div class="mdc-notched-outline__notch">
+                            <span id="followerCredits__floatingLabel" class="mdc-floating-label">Minutes of normal use</span>
+                          </div>
+                          <div class="mdc-notched-outline__trailing"></div>
+                        </div>
+                      </label>
+                      <div class="mdc-text-field-helper-line">
+                        <div class="mdc-text-field-helper-text mdc-text-field-helper-text--persistent" aria-hidden="true">credits that each such follower can use while unregistered</div>
+                      </div>
+                    </div>
+                  </li>
+
+                  <li class="mdc-list-item">
+                    Total: <span id="inviteTotal">10</span>
+                  </li>
+                </ul>
+                <input type="submit" class="mdc-button" value="sponsor">
+              </fieldset>
+            </form>
+
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="cancel">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">OK</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
+
     <div id="selectUser" class="mdc-dialog">
       <div class="mdc-dialog__container">
         <div class="mdc-dialog__surface"
@@ -354,7 +470,7 @@
     </div>
     
     <div id="credits" class="mdc-dialog">
-      <form id="buyEnergy" class="FIXMEonlyRegistered mdc-dialog__container">
+      <form id="buyEnergy" class="mdc-dialog__container">
         
         <div class="mdc-dialog__surface"
              role="alertdialog"
@@ -641,5 +757,6 @@
     </div>
     
     <script src="account.js"></script>
+    <script src="qrcode.js"></script>
   </body>
 </html>

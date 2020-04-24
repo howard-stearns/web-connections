@@ -53,7 +53,7 @@ function deleteCredential(id) {
 }
 const dbVersion = 6;
 if ((getDb('version') || 0) < dbVersion) {
-    console.warn('Clearing local db.');
+    alert('Clearing local db. You should clear your browser passwords for https://web-connections.herokuapp.com. (Ask Howard.)');
     if (browserHasPasswordCredentialStore()) {
         getIds().forEach(deleteCredential);
     }
@@ -91,7 +91,7 @@ function service(url, data, defaultProperties = {}) {
                        : Object.assign(defaultProperties, json)});
 }
 
-var isRegistered = false;
+var isRegistered = undefined; // Initially not false.
 
 function unregisteredLogin() {
     // FIXME: do we have what we need in cookies? Do we need to contact the server again?
@@ -102,11 +102,16 @@ function unregisteredLogin() {
     });
 }
 function passwordLogin({id, password, name, iconURL}) {
-    // Get decription key and update keys. Else reject.
-    return service('/login', {id, password}, {iconURL, name, id, password})
+    setRegistered(id);
+    const data = {id, password};
+    if (loginInvite) data.destination = loginInvite;
+    return service('/login', data, {iconURL, name, id, password})
 }
 function createOrUpdateRegistration(options) { // on server
-    return service('/registration', options, options);
+    setRegistered(options.email);
+    const data = Object.assign({}, options);
+    if (loginInvite) data.destination = loginInvite;
+    return service('/registration', data, options);
 }
 function handleSuccessfulLogin(user) {
     if (!user) return Promise.resolve();
@@ -127,7 +132,6 @@ function handleSuccessfulLogin(user) {
         if ((user.credits - currentEnergy) > 0.3) changes.push('credits');
         noteChanges(changes);
     }
-    setRegistered(user.id); // counting on user.id being falsey for unregistered users
     setupUser(user);
     // FIXME: update keystore if needed
     if (!user.id) return user;
@@ -143,7 +147,6 @@ function register(options) {
     // FIXME: don't submit what has not actually changed.
     return createOrUpdateRegistration(options)
         .then(handleSuccessfulLogin)
-        .then(_ => setRegistered(options.id))
         .then(_ => location.hash = '');
 }
 function logOut({preventSilentAccess, notify} = {preventSilentAccess: false, notify: true}) {
@@ -182,6 +185,13 @@ function confirmPassword(id, e = null) { // case 2, above
         .then(passwordLoginIf)
         .catch(e => confirmPassword(id, e))
 }
+function withPassword(id, functionOfCredential) {
+    return confirmPassword(id).then(credential => {
+        if (!credential) return;
+        if (credential.id !== id) return Promise.reject(new Error("Changed user from ${id} to ${credential.id}."));
+        return functionOfCredential(Object.assign({}, credential));
+    });
+}
 function handleLoginResult(result, notify = false) {
     console.log('handleLoginResult', result, notify);
     if (result) return handleSuccessfulLogin(result);
@@ -205,8 +215,7 @@ async function unregister() {
     await initialSetUp;
     const id = isRegistered;
     if (!id) return console.error('unregister should only be enabled for registered users.');
-    confirmPassword(id).then(credential => {
-        if (!credential) return;
+    withPassword(id, credential => {
         service('/delete', credential)
         // We cannot delete from browser credentials, but we can render them obvious.
             .then(_ => deleteCredential(id))
@@ -216,14 +225,10 @@ async function unregister() {
             .then(_ => logOut({preventSilentAccess: true, notify: true}))
     });
 }
-
 function purchase({id, credits}) {
-    return confirmPassword(id).then(credential => {
-        console.log('purchase', id, 'credits', credits, 'with credential', credential)
-        if (!credential) return;
-        if (credential.id !== id) return Promise.reject(new Error("Changed user from ${id} to ${credential.id}."));
-        credential.credits = credits;
-        service('/purchase', credential, credential)
+    return withPassword(id, credential => {
+        credential.purchase = credits;
+        service('/purchase', credential)
             .then(handleLoginResult); // FIXME: this part might be confusing if purchases are not applied right away
     });
 }
@@ -726,8 +731,9 @@ function noteChanges(changes) {
 }
 
 function setRegistered(id) {
+    if (id !== isRegistered) resetDestinationData();
     isRegistered = id;
-    buyEnergy__fieldset.disabled = forgetMe.disabled = !id;
+    share__fieldset.disabled = buyEnergy__fieldset.disabled = forgetMe.disabled = !id;
     const disabled = 'mdc-list-item--disabled';
     if (id) {
         body.classList.add('registered');
@@ -745,13 +751,55 @@ function setRegistered(id) {
         logoutItem.classList.add(disabled);
     }
 }
+var mapLocation, loginInvite = false, destination = false; // destination latches until reset.
+function resetDestinationData() {
+    const href = new URL(location.href);
+    loginInvite = href.searchParams.get('invite');
+    mapLocation = destination = false;
+}
+function setLocation(x, y, removeInvite = false) {
+    if ((x === undefined) || (y === undefined)) return;
+    mapLocation = {x, y};
+    const params = new URL(location.href).searchParams;
+    params.set('x', x);
+    params.set('y', y);
+    if (removeInvite) params.delete('invite');
+    history.replaceState({}, document.title, location.pathname + '?' + params);
+}
+function teleport() {
+    if (!destination) return;
+    const {x, y} = destination;
+    // FIXME: Here we set energy and mapLocation to be picked up by reportUserStats. In thereal implementation, we would communicate
+    // with the world simulator or audio mixer to have them report our position, subject to collisions and such.
+    currentEnergy -= 10;
+    destination = null;
+    setLocation(x, y, true);
+    guide.classList.add('hidden');
+    reportUserStats();
+}
+var fixmeDemoFollowId;
 function setupUser(credential) {
-    const {name, iconURL, credits, strength} = credential;
+    const {name, iconURL, credits, strength, demoFollowName, demoFollowId, x, y, destination:invite} = credential;
     console.log('setupUser', credential);
     if (iconURL) profile__image.src = profilemenu__image.src = iconURL;
-    if (name) profilemenu__name.innerText = name;
+    if (name) demoYourOwnName.innerText = /* fixme remove <<that */profilemenu__name.innerText = name;
+    //if (name) profilemenu__name.innerText = name;
     if (credits !== undefined) currentEnergy = credits;
     if (strength) currentStrength = strength;
+    if (demoFollowName) { // FIXME remove
+        demoHostname1.innerText = demoHostname2.innerText = demoHostname3.innerText = demoHostname4.innerText =  demoFollowName;
+        fixmeDemoFollowId = demoFollowId;
+    }
+    setLocation(x, y);
+    if (invite) {
+        guide.classList.remove('hidden');
+        destination = invite;
+        destinationHost.innerText = destination.name;
+        destinationLocation.innerText = `${destination.x}, ${destination.y}`;
+        yourLocation.innerText = `${x}, ${y}`;
+    } else {
+        guide.classList.add('hidden');
+    }
     return credential;
 }
 function onAppdrawerClosed() {
@@ -792,6 +840,37 @@ function onBuyEnergy(e) {
     e.preventDefault();
     creditsDialog.close();
     purchase({id: isRegistered, credits: Number.parseInt(purchaseAmount.value)}).catch(console.error);
+}
+
+function onCopyUrl() {
+    inviteUrl.select();
+    inviteUrl.setSelectionRange(0, 99999);
+    document.execCommand('copy');
+    console.log('copying', inviteUrl.value, 'to clipboard');
+}
+const QR_CELL_SIZE = 7;
+function showQR(url) {
+    inviteUrl.value = url;
+    qr.className = '';
+    var generator = qrcode(0, 'H');
+    generator.addData(url);
+    generator.make();
+    qr.innerHTML = generator.createImgTag(QR_CELL_SIZE);
+}
+function parsedNFollowers() { return Number.parseInt(nFollowers.value || "1"); }
+function parsedFollowerCredits() { return Number.parseInt(followerCredits.value || "10"); }
+function onShareSubmit(e) {
+    e.preventDefault();
+    // Do not close: let people use the url
+    withPassword(isRegistered, credential => {
+        credential.energy = parsedFollowerCredits();
+        credential.followers = parsedNFollowers();
+        service('/createInvite', credential).then(link => {
+            // FIXME how should this interact with back/forward button? How to get back to registerd-only?
+            showQR(link.href);
+            body.classList.add('shareAnyone');
+        });
+    });
 }
 function togglePasswordVisibility(e) {
     e.preventDefault();
@@ -895,20 +974,23 @@ function windowedAverage(amount, array) {
     return average(array);
 }
 function formatCredits(energy) {
-    return (energy > 1000) ? energy.toFixed() : energy.toPrecision(3);
+    return (energy > 1000) ? energy.toFixed() : (energy < 0.001 ? "0.000" : energy.toPrecision(3));
+}
+// FIXME: actual /reportEnergy should be done by a mixer with proper auth, not the client.
+// FIXME: should be randomized a bit to avoid synchronization
+function reportUserStats() {
+    updateCounter = 0;
+    const data = {id: isRegistered, energy: currentEnergy};
+    if (mapLocation) data.location = mapLocation;
+    service('/updateUserStats', data);
 }
 function updateEnergy() {
     var meterThisPeriod = currentStrength * Math.random();  // FIXME
     const consumptionThisPeriod = Math.max(0, Math.min(currentEnergy, meterThisPeriod * LINEAR_CONSUMPTION_METER_UNITS));
     currentEnergy = computeCreditsOnInterval(currentEnergy, ENERGY_INTERVAL_MS) - consumptionThisPeriod;
 
-    // FIXME: actual /reportEnergy should be done by a mixer with proper auth, not the client.
-    // FIXME: should be randomized a bit to avoid synchronization
-    if (isRegistered && !(++updateCounter % UPDATES_PER_REPORT)) {
-        updateCounter = 0;
-        service('/reportEnergy', {id: isRegistered, energy: currentEnergy});
-    }
-    energyBarLinearProgress.progress = windowedAverage(meterThisPeriod / MAX_STRENGTH, consumptionBuffer);
+    if (isRegistered && !(++updateCounter % UPDATES_PER_REPORT)) reportUserStats();
+    energyBarLinearProgress.progress = windowedAverage((consumptionThisPeriod / LINEAR_CONSUMPTION_METER_UNITS) / MAX_STRENGTH, consumptionBuffer);
     const averageEnergy = windowedAverage(currentEnergy, energyBuffer);
     energy.innerText = formatCredits(averageEnergy);
 }
@@ -922,11 +1004,13 @@ function gotoHash(x) {
     doDialog('#energy', creditsDialog);
     doDialog('#notImplementedIndependent', notImplementedIndependentDialog);
     doDialog('#notImplementedDependent', notImplementedDependentDialog);
+    doDialog('#share', shareDialog);
     doDialog('#privacy', privacyDialog);
+    doDialog('#destinationGuide', destinationGuideDialog);
     is('#registration') ? openRegistration() : closeRegistration();
     switch (location.hash) {
     case '#energy':
-        energyAmount.innerText = formatCredits(currentEnergy);
+        energyAmount.innerText = formatCredits(currentEnergy); // FIXME: Make more stand-alone, through an "on open" handler.
         break;
     case '#login':
         logIn();
@@ -935,9 +1019,27 @@ function gotoHash(x) {
     case '#logout':
         logOut({preventSilentAccess: true, notify: false});
         break;
+    case '#createDemoLink':
+        service('/createInvite', {id: fixmeDemoFollowId, energy: 10, followers: 100}).then(link => {
+            demoLink.href = link.href;
+            demoLink.innerText = demoHostPosition;
+            location.hash = '';
+        });
+        break;
+    case '#demo1':
+        service('/updateUserStats', {id: fixmeDemoFollowId, location: {x: 100, y: 100}})
+            .then(_ => { demoHostPosition = "demo link to position 1"; location.hash = ''; });
+        break;
+    case '#demo2':
+        service('/updateUserStats', {id: fixmeDemoFollowId, location: {x: 2000, y: 2000}})
+            .then(_ => { demoHostPosition = "demo link to position 2"; location.hash = ''; });
+        break;
+    case '#destinationGuide':
+        guide.blur();
+        break;
     }
 }
-
+var demoHostPosition = "demo link to position 1";
 
 // GLOBALS
 
@@ -962,14 +1064,18 @@ const MDCSnackbar = mdc.snackbar.MDCSnackbar;
 const topbarTopAppBar = new MDCTopAppBar(topbar);
 const topbarRipple = new MDCRipple(topbar);
 const navigationButonRipple = new MDCRipple(navigationButton);
+const copyUrlRipple = new MDCRipple(copyUrl);
 const appdrawerDrawer = new MDCDrawer(appdrawer);
 const privacyDialog = new MDCDialog(privacy);
+const shareDialog = new MDCDialog(share);
+const destinationGuideDialog = new MDCDialog(destinationGuide);
 const notImplementedIndependentDialog = new MDCDialog(notImplementedIndependent);
 const notImplementedDependentDialog = new MDCDialog(notImplementedDependent);
 const creditsDialog = new MDCDialog(credits);
 const webcamDialog = new MDCDialog(webcam);
 const profileRipple = new MDCRipple(profile);
 const profileMenu = new MDCMenu(profilemenu);
+const guideRipple = new MDCRipple(guide);
 
 const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 
@@ -986,23 +1092,36 @@ if ((location.protocol !== 'https') && (location.hostname !== 'localhost')) aler
     [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
     [notImplementedDependentDialog, 'MDCDialog:closed', '#notImplementedDependent'],
     [privacyDialog, 'MDCDialog:closed', '#privacy'],
+    [shareDialog, 'MDCDialog:closed', '#share'],
+    [destinationGuideDialog, 'MDCDialog:closed', '#destinationGuide'],
     [creditsDialog, 'MDCDialog:closed', '#energy'],    
     [profileMenu, 'MDCMenuSurface:closed', '#profile']
 ].forEach(([element, event, from, to = '']) => element.listen(event, _ => goIf(from, to)));
 
 webcamDialog.listen('MDCDialog:closed', webcamStop);
+destinationGuideDialog.listen('MDCDialog:closed', ({detail}) => (detail.action === 'yes') && teleport());
 appdrawerDrawer.listen('MDCDrawer:closed', onAppdrawerClosed);
 creditsDialog.listen('MDCDialog:opened', _ => {
     const fields = instantiateFields(credits);
     const lists = instantiateAndLayoutLists(credits);
 });
+shareDialog.listen('MDCDialog:opened', _ => {
+    const fields = instantiateFields(share);
+    const lists = instantiateAndLayoutLists(share);
+    const href = new URL(location.href);
+    href.hash = '';
+    href.searchParams.delete('invite');
+    showQR(href.href);
+});
 topbarTopAppBar.listen('MDCTopAppBar:nav', _ => location.hash = 'navigation');
 loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
     if (detail.reason === 'action') location.hash = 'login';
 });
+nFollowers.onchange = followerCredits.onchange = _ => inviteTotal.innerText = parsedNFollowers() * parsedFollowerCredits();
 
 [
     [profile, 'profile'],
+    [guide, 'destinationGuide'],
     [energyBar, 'energy']
 ].forEach(([element, hash]) => element.addEventListener('click', _ => location.hash = hash));
 [
@@ -1010,8 +1129,10 @@ loggedOutSnackbar.listen('MDCSnackbar:closed', ({detail}) => {
     [faceCamera, showFaceResult],
     [face, showFaceResult],
     [forgetMe, unregister],
+    [copyUrl, onCopyUrl],
     [buyEnergy__list, _ => {!isRegistered && (location.hash = 'registration');}],
     [registrationForm, onRegistrationSubmit, 'submit'],
+    [share__form, onShareSubmit, 'submit'],
     [buyEnergy, onBuyEnergy, 'submit'],
     [window, gotoHash, 'hashchange']
 ].forEach(([element, operation, event = 'click']) => element.addEventListener(event, operation));

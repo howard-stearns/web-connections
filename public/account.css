@@ -73,6 +73,10 @@ body.registered .onlyUnregistered {
 body:not(.registered) .onlyRegistered {
     display: none;
 }
+body.shareAnyone .onlyShareRegistered,
+body:not(.shareAnyone) .onlyShareAnyone  {
+    display: none;
+}
 .hidden {
     display: none !important;
 }
