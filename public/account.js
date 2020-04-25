@@ -1128,7 +1128,7 @@ const registrationFailSnackbar = new MDCSnackbar(registrationFail);
 
 if (!window.speechSynthesis) alert('This browser does not support speech!');
 if (!navigator.mediaDevices) alert('This browser does not support webcams!');
-if ((location.protocol !== 'https') && (location.hostname !== 'localhost')) alert('You must use https, not http!');
+if ((location.protocol !== 'https:') && (location.hostname !== 'localhost')) alert('You must use https, not http!');
 
 [
     [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
