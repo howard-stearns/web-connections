@@ -225,7 +225,7 @@ async function matchesOtherFaceFail(userid, options) {
         return getDbHash(uid).then(user => {
             if (!user || !user.meanDescriptor || uid === userid) return;
             const otherDescriptor = JSON.parse(user.meanDescriptor);
-            const difference = descriptorDistance(options.descriptor, otherDescriptor);
+            const difference = distance(options.descriptor, otherDescriptor);
             const id = user.emails[user.emails.length - 1];
             pseudo.info({url: `/intraUser?distance=${Math.round(difference * 100)}&id=${id}`});
             // FIXME message?
@@ -242,7 +242,7 @@ function mismatchedFaceFail(user, options) {
     if (!options.descriptor) return Promise.reject(new Error("Security selfie is not clear."));
     if (user.meanDescriptor) {
         const mean = JSON.parse(user.meanDescriptor);
-        const meanDifference = descriptorDistance(mean, options.descriptor);
+        const meanDifference = distance(mean, options.descriptor);
         pseudo.info({url: `/interUser?distance=${Math.round(meanDifference * 100)}`});
         // FIXME message?
         if (meanDifference > 0.52) throw new Error(`Your face is wrong. ${meanDifference.toFixed(2)} from previous registration. And you're old.`);
@@ -258,6 +258,8 @@ function updateMeanDescriptor(user, options) {
     user.meanDescriptor = JSON.stringify(mean);
     user.descriptors = JSON.stringify(descriptors);
 }
+
+const NEARBY = 100; // meters
 
 // Only the top level operations get locks, on email, and for get/set also on userid. (Nothing nested.)
 async function setUser(data, options) {
@@ -316,8 +318,12 @@ async function setUser(data, options) {
             const host = await getDbHash(invite.userid);
             if (!host) throw new Error(`No host for invitation ${data.destination}.`);
             // FIXME: count down invite.remaining, but don't double count reloads.
-            // FIXME: check that host.x/y is near invite.x/y, and still online
-            destination = {x: host.x, y: host.y, name: host.name};
+            // check that host.x/y is near invite.x/y, and still online
+            if (distance([invite.x, invite.y], [host.x, host.y]) < NEARBY) {
+                destination = {name: host.name, x: host.x, y: host.y};
+            } else {
+                destination = {name: host.name}; // Don't reveal the location.
+            }
             delete data.destination;
         }
         // Can't be done before security checks.
@@ -499,9 +505,9 @@ app.post('/message', function (req, res) {
 });
 
 const FACE_CUTOFF = 0.5;
-function descriptorDistance(a, b) {
-    var sum = 0;
-    for (let i = 0; i < 128; i++) {
+function distance(a, b) {
+    var sum = 0, length = a.length;
+    for (let i = 0; i < length; i++) {
         let difference = a[i] - b[i];
         sum += difference * difference;
     }
@@ -519,7 +525,7 @@ app.post('/submitFace', function (req, res) {
         // Compute distance for each face
         faces.forEach(({descriptor, image}) => {
             matches.push({
-                distance: descriptorDistance(req.body.descriptor, descriptor),
+                distance: distance(req.body.descriptor, descriptor),
                 image
             });
         });

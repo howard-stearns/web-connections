@@ -722,6 +722,7 @@ function notifyLoggedOut(notify) {
     loggedOutSnackbar.open();
 }
 function noteChanges(changes) {
+    return; // FIXME: this is just confusing things. Rip it out, or make it clearer.
     if (!changes.length) return;
     const label = (changes.length > 1)
         ? changes.slice(0, -1).join(', ') + ' and ' + changes[changes.length - 1]
@@ -768,29 +769,59 @@ function setLocation(x, y, removeInvite = false) {
 }
 function teleport() {
     if (!destination) return;
-    const {x, y} = destination;
+    const {x, y, name} = destination;
     // FIXME: Here we set energy and mapLocation to be picked up by reportUserStats. In thereal implementation, we would communicate
     // with the world simulator or audio mixer to have them report our position, subject to collisions and such.
-    currentEnergy -= 10;
     destination = null;
+    currentEnergy -= 10;
     setLocation(x, y, true);
     guide.classList.add('hidden');
     reportUserStats();
+    announceArrival(name);
+}
+function distance(a, b) { // euclidian distance between any two arrays
+    var sum = 0, dimensions = Math.max(a.length, b.length);
+    for (let i = 0; i < dimensions; i++) {
+        let difference = (a[i] || 0) - (b[i] || 0);
+        sum += difference * difference;
+    }
+    return Math.sqrt(sum);
+}
+
+const NEARBY = 100; // meters
+function announceArrival(hostname) {
+    console.log('arrived at', hostname);
+    arrived__label.innerText = hostname ? `You have arrived near ${hostname}.` : "You have arrived.";
+    arrivedSnackbar.open();
+}
+function announceDeparted(hostname) {
+    console.log(hostname, 'departed');
+    arrived__label.innerText =`${hostname} is no longer present.`;
+    arrivedSnackbar.open();
 }
 var fixmeDemoFollowId;
 function setupUser(credential) {
-    const {name, iconURL, credits, strength, demoFollowName, demoFollowId, x, y, destination:invite} = credential;
+    var {name, iconURL, credits, strength, demoFollowName, demoFollowId, x, y, destination:invite} = credential;
     console.log('setupUser', credential);
     if (iconURL) profile__image.src = profilemenu__image.src = iconURL;
     if (name) demoYourOwnName.innerText = /* fixme remove <<that */profilemenu__name.innerText = name;
-    //if (name) profilemenu__name.innerText = name;
     if (credits !== undefined) currentEnergy = credits;
     if (strength) currentStrength = strength;
     if (demoFollowName) { // FIXME remove
         demoHostname1.innerText = demoHostname2.innerText = demoHostname3.innerText = demoHostname4.innerText =  demoFollowName;
         fixmeDemoFollowId = demoFollowId;
     }
-    setLocation(x, y);
+    if (invite) {
+        console.log('invite', invite.x, invite.y, x, y);
+        if ((invite.x === undefined) || (invite.y === undefined)) { // The host has moved.
+            announceDeparted(invite.name);
+            invite = false;
+        } else if (distance([x, y], [invite.x, invite.y]) < NEARBY) {
+            announceArrival(invite.name);
+            invite = false;
+        }
+    }
+    setLocation(x, y, !invite);
     if (invite) {
         guide.classList.remove('hidden');
         destination = invite;
@@ -1092,6 +1123,7 @@ const energyBarLinearProgress = new MDCLinearProgress(energyBar);
 const loggedOutSnackbar = new MDCSnackbar(loggedOut);
 const changedSnackbar = new MDCSnackbar(changed);
 const signingInSnackbar = new MDCSnackbar(signingIn);
+const arrivedSnackbar = new MDCSnackbar(arrived);
 const registrationFailSnackbar = new MDCSnackbar(registrationFail);
 
 if (!window.speechSynthesis) alert('This browser does not support speech!');

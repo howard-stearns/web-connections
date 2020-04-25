@@ -154,7 +154,7 @@
         <ul class="implemented">
           <li class="notImplemented">All use is accounted for (registered or not).</li>
           <li>Credits are consumed by speaking, applying or resisting force, changing display name, teleporting, and by a decay of x%/interval (whether you're online or off).</li>
-          <li>You also get a constant credit stipend of 60 normal-minute-use each day. With the current decay rate of 7.5%/day, you will find that if you log off for a month, you'll be approaching 800 minutes of energy, regardless of whether you started at 0 or higher. The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.075 = 800.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the day is large enough, or it blows up otherwise.)</i></li>
+          <li>You also get a constant credit stipend of 60 normal-minute-use each day. With the current decay rate of 7.5%/day, you will find that if you log off for a month, you'll be approaching 800 minutes of energy, regardless of whether you started at 0 or higher. The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.075 = 800.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the decay is large enough, or it blows up otherwise.)</i></li>
           <li>You can change your "strength" factor at any time, making you louder or more forceful, but making you burn credits faster while speaking or applying/resisting force.</li>
           <li>You cannnot consume credits you don't have, so regardless of "strength", your volume and force per unit time will decrease as you run very low.</li>
           <li class="notImplemented">An anonymous user will dissappear from the map when their energy becomes negligable. Registered users remain (although they might fade away after a time, TBD). In any case, users do not dissapear when they close their browser.</li>
@@ -717,6 +717,19 @@
         <div class="mdc-snackbar__actions">
           <button type="button" class="mdc-button mdc-snackbar__action">
             <span class="mdc-button__label">Sign in</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="arrived" class="mdc-snackbar">
+      <div class="mdc-snackbar__surface">
+        <div id="arrived__label" class="mdc-snackbar__label" role="status" aria-live="polite">
+          You have arrived.
+        </div>
+        <div class="mdc-snackbar__actions">
+          <button type="button" class="mdc-button mdc-snackbar__action">
+            <span class="mdc-button__label">cancel</span>
           </button>
         </div>
       </div>
