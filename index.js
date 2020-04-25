@@ -3,6 +3,7 @@ const PORT = process.env.PORT || 8443;
 const path = require('path');
 const fs = require('fs');
 const url = require('url');
+const { exec } = require("child_process");
 const express = require('express');
 const bodyParser = require('body-parser');
 const https = require('https'); // for forwarding to hifi-telemetric
@@ -21,7 +22,7 @@ process.title = "p2p-load-test";
 const app = express();
 const expressWs = require('express-ws')(app);
 app.set('trust proxy', true);
-const logger = morgan('common');
+const logger = morgan('dev'); // FIXME 'common');
 pseudo.configure(logger);
 faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 const namesConfig = {
@@ -66,6 +67,10 @@ function promiseLock(key, thunk) {
     });
 }
 
+// FIXME: When using multiple server instances, they will need to coordinate with each other, e.g., through a Redis lock.
+// Or just use what the db provides.
+function dbLock(key, thunk) { return promiseLock(key, thunk); }
+
 // Low-level wrapers around the db.
 const dbdir = path.join(__dirname, 'db');
 fs.mkdir(dbdir, e => e && (e.code !== 'EEXIST') && console.error(e));
@@ -94,6 +99,24 @@ function fakeDbDelete(key) {
 function getDbString(id) { return fakeDbGet(id); }
 function setDbString(id, value) { return fakeDbSet(id, value); }
 function removeDbString(id) { return fakeDbDelete(id); }
+
+const dbDesiredVersion = 7, dbVersionKey = 'dbVersion';
+getDbString(dbVersionKey).then(version => {
+    console.log('Existing db version:', version, 'desired:', dbDesiredVersion);
+    if (!version) version = 0; // FIXME: just this once, and the remove
+    if (version && (version < dbDesiredVersion)) {
+        console.warn('Flushing database!');
+        // FIXME: FLUSHDB for redis
+        const command = `rm -f ${dbdir}/*`;
+        exec(command, (...results) => { // there are no subdirs // FIXME rm -f
+            console.log(command, '=>', ...results);
+            setDbString(dbVersionKey, dbDesiredVersion);
+        });
+    } else if (!version) {
+        console.info('Creating db');
+        setDbString(dbVersionKey, dbDesiredVersion);
+    }
+});
 
 async function addToDbSet(set, element) {
     var ids = await fakeDbGet(set);
@@ -182,7 +205,6 @@ email1 => userid; email2 => userid; ...
 function trimUser(user) { // What gets returned to user. FIXME: determine the minimum needed.
     const cred = Object.assign({}, user);
     cred.faces = cred.faces.slice(-1);
-    if (!cred.strength) cred.strength = 1;
     return user;
 }
 
@@ -271,8 +293,8 @@ async function setUser(data, options) {
         emailPointersToUpdate.push(emailKey);
     }
     const locks = [userid, emailKey];
-    if (data.oldEmail && data.oldEmail !== data.email) locks.push(data.email);
-    return promiseLock(locks, async _ => {
+    if (data.oldEmail && (data.oldEmail !== data.email)) locks.push(data.email);
+    return dbLock(locks, async _ => {
         var newCharges = 0;
         if (data.oldEmail && data.email && !await getDbString(data.email)) { // Add additonal pointer if email changed.
             emailPointersToUpdate.push(data.email);
@@ -354,7 +376,7 @@ async function setUser(data, options) {
 function getUser(email, options) {
     return getDbString(email).then(userid => {
         if (!userid) return Promise.reject(new Error(`No such email: ${email}.`));
-        return promiseLock([email, userid], _ => {
+        return dbLock([email, userid], _ => {
             return getDbHash(userid).then(async user => {
                 if (!user) throw new Error(`No user for email: ${email}.`);
                 passwordFail(user, options)
@@ -365,7 +387,7 @@ function getUser(email, options) {
 }
 function deleteUser(email, options) {
     return getUser(email, options)
-        .then(user => promiseLock(email, _ => {
+        .then(user => dbLock(email, _ => {
             return getDbString(email).then(userid => {
                 return Promise.all(user.emails.map(id => removeDbString(id)))
                     .then(_ => user.demoFollowId && deleteUser(user.demoFollowId, {}))
@@ -556,7 +578,7 @@ const models = Promise.all([
 ]);
 
 async function computeDescriptor(url) {
-    const start = Date.now();
+    if (!url) return;
     await models;
     const captured = await loadImage(url);
     const final = await faceapi.detectSingleFace(captured)
@@ -589,7 +611,7 @@ function computeCreditsOnInterval(principle, ms) {
 function computeCurrentCredits(user) {
     const now = Date.now();
     var {credits = STIPEND_PER_DAY, updated = now} = user;
-    const elapsed = now - user.updated;
+    const elapsed = now - updated;
     // FIXME: If you buy credits and those are not applied until you are offline, or if you can by while
     // offline through another interface, then we need to to divide elapsed into 1+ nPurchases, and compute
     // compoundCreditsOnInterval with the previous principle (including purchases) and the elapsed

@@ -52,12 +52,15 @@ function deleteCredential(id) {
                    name: DELETED_CREDENTIAL_PROPERTY_VALUE});
 }
 const dbVersion = 6;
-if ((getDb('version') || 0) < dbVersion) {
+var version = getDb('version');
+if (version && (version < dbVersion)) {
     alert('Clearing local db. You should clear your browser passwords for https://web-connections.herokuapp.com. (Ask Howard.)');
     if (browserHasPasswordCredentialStore()) {
         getIds().forEach(deleteCredential);
     }
     localStorage.clear();
+    setDb('version', dbVersion);
+} else if (!version) {
     setDb('version', dbVersion);
 }
 
@@ -75,8 +78,19 @@ function delay(ms) { // Answer a promise that resolves after the specified ms.
     return new Promise(resolve => setTimeout(_ => resolve(), ms));
 }
 
+function trim(x) { // like inspect, but trimming long strings
+    const maxString = 60;
+    if (x === null) return "null";
+    if (typeof x === 'string') {
+        if (x.length > maxString) return `"${x.slice(0, maxString)}..."`;
+        return '"' + x + '"';
+    }
+    if (Array.isArray(x)) return '[' + x.map(trim).join(', ') + ']';
+    if (typeof x === 'object') return '{' + Object.keys(x).map(k => `${k}: ${trim(x[k])}`).join(', ') + '}';
+    return x;
+}
+
 function service(url, data, defaultProperties = {}) {
-    console.log('posting', url, data);
     return fetch(url, {
         method: 'post',
         headers: {
@@ -86,9 +100,14 @@ function service(url, data, defaultProperties = {}) {
         body: JSON.stringify(data)
     })
         .then(response => response.json())
-        .then(json => {console.log('server:', json); return json.error
-              ? Promise.reject(new Error(json.error))
-                       : Object.assign(defaultProperties, json)});
+        .then(json => {
+            const result = !json.error && Object.assign({}, defaultProperties, json);
+            console.log(url,
+                        '\nsent:', data, //trim(data),
+                        '\nreceived:', json, //trim(json),
+                        '\nreturning:', result); //trim(result));
+            return json.error ? Promise.reject(new Error(json.error)) : result;
+        });
 }
 
 var isRegistered = undefined; // Initially not false.
@@ -185,15 +204,16 @@ function confirmPassword(id, e = null) { // case 2, above
         .then(passwordLoginIf)
         .catch(e => confirmPassword(id, e))
 }
-function withPassword(id, functionOfCredential) {
-    return confirmPassword(id).then(credential => {
+// Asynchronously gets password and calls function({id, password}), resolving to that result.
+function withPassword(requestedId, functionOfCredential) { 
+    return confirmPassword(requestedId).then(credential => {
         if (!credential) return;
-        if (credential.id !== id) return Promise.reject(new Error("Changed user from ${id} to ${credential.id}."));
-        return functionOfCredential(Object.assign({}, credential));
+        const {id, password} = credential;
+        if (id !== requestedId) return Promise.reject(new Error("Changed user from ${requestedId} to ${id}."));
+        return functionOfCredential({id, password});
     });
 }
 function handleLoginResult(result, notify = false) {
-    console.log('handleLoginResult', result, notify);
     if (result) return handleSuccessfulLogin(result);
     return logOut({preventSilentAccess: false, notify: notify});
 }
@@ -666,7 +686,6 @@ async function getCredential(options) {
         return navigator.credentials.get(options)
             .then(cred => {
                 const elapsed = Date.now() - start;
-                console.log('getCredentials', cred, elapsed);
                 if (elapsed > 50) return cred; // explicit user action: believe the user
                 if (cred) return cred;
                 const ids = getIds();
@@ -765,7 +784,7 @@ function setLocation(x, y, removeInvite = false) {
     params.set('x', x);
     params.set('y', y);
     if (removeInvite) params.delete('invite');
-    history.replaceState({}, document.title, location.pathname + '?' + params);
+    history.replaceState({}, document.title, location.pathname + '?' + params + location.hash);
 }
 function teleport() {
     if (!destination) return;
@@ -802,7 +821,7 @@ function announceDeparted(hostname) {
 var fixmeDemoFollowId;
 function setupUser(credential) {
     var {name, iconURL, credits, strength, demoFollowName, demoFollowId, x, y, destination:invite} = credential;
-    console.log('setupUser', credential);
+    console.log('setupUser', trim(credential));
     if (iconURL) profile__image.src = profilemenu__image.src = iconURL;
     if (name) demoYourOwnName.innerText = /* fixme remove <<that */profilemenu__name.innerText = name;
     if (credits !== undefined) currentEnergy = credits;
@@ -1031,7 +1050,7 @@ function updateEnergy() {
     const averageEnergy = windowedAverage(currentEnergy, energyBuffer);
     energy.innerText = formatCredits(averageEnergy);
 }
-function gotoHash(x) {
+function gotoHash() {
     const hash = location.hash;
     function is(nav) { return nav === hash; }
     function setSheet(nav, sheet) { const should = is(nav); if (should !== sheet.open) sheet.open = should; }
@@ -1044,7 +1063,11 @@ function gotoHash(x) {
     doDialog('#share', shareDialog);
     doDialog('#privacy', privacyDialog);
     doDialog('#destinationGuide', destinationGuideDialog);
-    is('#registration') ? openRegistration() : closeRegistration();
+    if (is('#registration')) {
+        openRegistration()
+    } else {
+        closeRegistration();
+    }
     switch (location.hash) {
     case '#energy':
         energyAmount.innerText = formatCredits(currentEnergy); // FIXME: Make more stand-alone, through an "on open" handler.
@@ -1181,4 +1204,4 @@ nFollowers.onchange = followerCredits.onchange = _ => inviteTotal.innerText = pa
 
 const initialSetUp = logIn();
 setInterval(updateEnergy, ENERGY_INTERVAL_MS);
-gotoHash(99);
+gotoHash();
