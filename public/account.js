@@ -44,7 +44,8 @@ function storeLocalCredential(credential) {
 // The PasswordCredential API is not implemented in Safari or Firefox yet.
 // This uses the API when available, otherwise we recreate the same API, with similar UI.
 function browserHasPasswordCredentialStore() {
-    return 'PasswordCredential' in window;
+    //return false; // FIXME: for now, let's lean on our home-grown stuff so that it gets excercised.
+    return 'PasswordCredential' in window;  // Seems to be true just for Chrome.
 }
 const DELETED_CREDENTIAL_PROPERTY_VALUE = 'deleted';
 function deleteCredential(id) {
@@ -112,49 +113,84 @@ function service(url, data, defaultProperties = {}) {
 
 var isRegistered = undefined; // Initially not false.
 
+// We want to account for energy of everybody, so everyone logs in in some way.
+// An unregistered user still needs a login, but it is handled somewhat differently.
+// There are (at least) two ways we could handle this:
+// 1) Have an explicit path through unregisteredLogin, which creates the insecure acount here
+//    and then continues to use those same credentials for any subsequent unregistered use.
+// 2) Use the getCredential account machinery in the normal way, tracking the registered account
+//    and the "anonymous" one.
+// We're doing (1) while things are in such flux. Let's see how it goes.
+
+const unregisteredKey = 'unregistered';
+function getUnregisteredCredentials() {
+    return getDb(unregisteredKey) || {}; // If empty, /login will generate a new one for us to store and re-use.
+}
+function setUnregisteredCredentials(credentials) {
+    const {id, name, iconURL} = credentials;
+    setDb(unregisteredKey, {id, name, iconURL});
+    return Promise.resolve();
+}
 function unregisteredLogin() {
     // FIXME: do we have what we need in cookies? Do we need to contact the server again?
     setRegistered(false);
-    return service('/login', {}, {  // UI should still work on failure.
+    const credentials = getUnregisteredCredentials();
+    return service('/login', credentials, {  // UI should still work on failure.
         iconURL: "images/anonymous.jpg",
         name: "anonymous"
     });
 }
-function passwordLogin({id, password, name, iconURL}) {
+// The data sent to /login is {id, password, destination}, with the latter optional.
+// The result is merged against any other supplied defaults from credential (so that the server doesn't HAVE to send them back unless changed).
+function passwordLogin(credential) {
+    const {id, password} = credential, data = {id, password};
     setRegistered(id);
-    const data = {id, password};
     if (loginInvite) data.destination = loginInvite;
-    return service('/login', data, {iconURL, name, id, password})
+    return service('/login', data, credential)
 }
+// All of the given options are passed to /registration:
+//   New registrations should include {id, password, name, iconURL, strength}.
+//   Updates must have an oldEmail|id and an oldPassword|password that matches previous registration.
+// The result is merged against defaults from options (so that the serve doesn't HAVE to send them back unless changed).
 function createOrUpdateRegistration(options) { // on server
-    setRegistered(options.email);
+    setRegistered(options.id);
     const data = Object.assign({}, options);
     if (loginInvite) data.destination = loginInvite;
     return service('/registration', data, options);
 }
+
+function recordChanges(user) {
+    // Make note of changes, side effecting user so that new values are in the right properties for storage.
+    // Also gives us a chance to log changes or tell the user.
+    function last(list) { return list[list.length - 1]; }
+    let changes = [],
+        email = last(user.emails),
+        face = last(user.faces);
+    function noteNew(newValue, key, label = key) {
+        if (newValue && (newValue !== user[key])) {
+            if (label) changes.push(label);
+            user[key] = newValue;
+            return true;
+        }
+    }
+    if (noteNew(email, 'id', 'email')) removeDb(user.id); // storeCredentials will restore.
+    noteNew(user.displayName, 'name');
+    noteNew(face, 'iconURL', 'security selfie');
+    // We can't make note of a new password, and we don't need to.
+    if ((user.credits - currentEnergy) > 1) changes.push('credits'); // FIXME: but is it worthy notifying user?
+    noteChanges(changes);
+}
+
+// In the user object that comes back from the server:
+// Any value returned for displayName, password, iconURL, strength, credits, x, y is current. (Perhaps updated from another machine.)
 function handleSuccessfulLogin(user) {
     if (!user) return Promise.resolve();
-    if (user.id) {
-        function last(list) { return list[list.length - 1]; }
-        let changes = [], email = last(user.emails), face = last(user.faces);
-        function noteNew(newValue, key, label = key) {
-            if (user[key] !== newValue) {
-                if (label) changes.push(label);
-                user[key] = newValue;
-                return true;
-            }
-        }
-        if (noteNew(email, 'id', 'email')) removeDb(user.id); // storeCredentials will restore.
-        noteNew(user.displayName, 'name');
-        noteNew(face, 'iconURL', false);
-        // We can't make note of a new password, and we don't need to.
-        if ((user.credits - currentEnergy) > 0.3) changes.push('credits');
-        noteChanges(changes);
-    }
+    const registered = user.password; // No need for passwords on unregistered "accounts".
+    recordChanges(user);
     setupUser(user);
     // FIXME: update keystore if needed
-    if (!user.id) return user;
-    return storeCredentials(user).then(_ => user);
+    const stored = registered ? storeCredentials(user) : setUnregisteredCredentials(user);
+    return stored.then(_ => user);
 }
 function storeCredentials(options) {
     // We don't get to ask navigator.credentials how many accounts there are, or what their names/icons are,
@@ -172,21 +208,21 @@ function logOut({preventSilentAccess, notify} = {preventSilentAccess: false, not
     console.log('logOut: preventSilentAccess =', preventSilentAccess, 'notify =', notify);
     return unregisteredLogin()
         .then(handleSuccessfulLogin)
-        .then(_ => location.hash = '')
+        .then(_ => notifyLoggedOut(notify))
         .then(_ => preventSilentAccess && preventSilentCredentialAccess())
-        .then(_ => notifyLoggedOut(notify));
+        .then(_ => location.hash = '');
 }
 
 // There are two password-based login cycles to cover:
 // 1. Ordinary login, starting with assumed credentials from getCredential 
-//    If supported by the browser, getCredential will do the right thing: ask the user to actively select
-//    a profile (with no password) if explicitly logged out, or if more than one to chose from. Otherwise
-//    just do it and notify.
+//    getCredential will do the right thing: ask the user to actively select
+//    a profile (with no password) if explicitly logged out, or if more than one to chose from.
+//    Otherwise just do it and notify.
 // 2. Before updating the user's (server-based) profile, starting with just an id
 //    In this case, we DO want to ask for a password, labeled by a specific profile,
 //    and we do NOT want to pick between profiles (which can happen with getCredential).
 // In either case, we want to process the login results. But if the login fails (in either case), we want to let
-// the password-request repeat (as in (2),) until success, or just ensure logOut if the user gives up.
+// the password-request repeat (as in (2)) until success, or just ensure logOut if the user gives up.
 function passwordLoginIf(credential) {
     if (!credential || (credential.type !== 'password')) return Promise.resolve();
     return passwordLogin(credential);
@@ -213,7 +249,7 @@ function withPassword(requestedId, functionOfCredential) {
         return functionOfCredential({id, password});
     });
 }
-function handleLoginResult(result, notify = false) {
+function handleLoginResult(result, notify = false) { // FIXME: looks like notify is now never true. Drop it?
     if (result) return handleSuccessfulLogin(result);
     return logOut({preventSilentAccess: false, notify: notify});
 }
@@ -453,6 +489,10 @@ async function webcamCapture(displaySize, start) {
 
 
 // UI LOGIC
+
+function useClass(element, className, isOn) {
+    element.classList[isOn ? 'add' : 'remove'](className);
+}
 
 // FIXME: there are a couple of places where we should be doing MDCList.layout, but aren't. Should we use this?
 function openDialog(dialogDomElement, onOpen=null, stack = false) {
@@ -741,6 +781,7 @@ function notifyLoggedOut(notify) {
     loggedOutSnackbar.open();
 }
 function noteChanges(changes) {
+    console.log('changed:', ...changes);
     return; // FIXME: this is just confusing things. Rip it out, or make it clearer.
     if (!changes.length) return;
     const label = (changes.length > 1)
@@ -752,24 +793,18 @@ function noteChanges(changes) {
 
 function setRegistered(id) {
     if (id !== isRegistered) resetDestinationData();
+    const hasRegistered = getIds().length;
     isRegistered = id;
     share__fieldset.disabled = buyEnergy__fieldset.disabled = forgetMe.disabled = !id;
     const disabled = 'mdc-list-item--disabled';
-    if (id) {
-        body.classList.add('registered');
-        registerItem.classList.add(disabled);
-        loginItem.classList.add(disabled);        
-        logoutItem.classList.remove(disabled);
-    } else {
-        body.classList.remove('registered');
-        registerItem.classList.remove(disabled);
-        if (getIds().length) {
-            loginItem.classList.remove(disabled);
-        } else {
-            loginItem.classList.add(disabled);
-        }
-        logoutItem.classList.add(disabled);
-    }
+    useClass(body, 'registered', id);
+    // FIXME: there are places where we encourage people to register, that are visible when unregistered.
+    // When you have already registered, we should either hide them, or change the to encourage signing in.
+    // Exactly how to resolve this depends on whether there should be a "sign out" once signed in, or not.
+    useClass(registerItem, 'hidden', hasRegistered);
+    useClass(registerItem, disabled, id);
+    useClass(logoutItem, disabled, !id);
+    useClass(loginItem, disabled, id || !hasRegistered);
 }
 var mapLocation, loginInvite = false, destination = false; // destination latches until reset.
 function resetDestinationData() {
@@ -841,14 +876,12 @@ function setupUser(credential) {
         }
     }
     setLocation(x, y, !invite);
+    useClass(guide, 'hidden', !invite);
     if (invite) {
-        guide.classList.remove('hidden');
         destination = invite;
         destinationHost.innerText = destination.name;
         destinationLocation.innerText = `${destination.x}, ${destination.y}`;
         yourLocation.innerText = `${x}, ${y}`;
-    } else {
-        guide.classList.add('hidden');
     }
     return credential;
 }
@@ -867,15 +900,19 @@ function onAppdrawerClosed() {
 }
 function onRegistrationSubmit(e) {
     e.preventDefault();
-    register({
+    const data = {
         id: email.value,
         oldEmail: oldEmail.value,
         oldPassword: oldPassword.value,
         name: displayName.value,
         iconURL: face.value,
-        password: password.value,
         strength: Number.parseInt(strength.value)
-    }).catch(e => {
+    };
+    if (isRegistered || !registration.classList.contains('update')) {
+        data.password = password.value; // Don't pass when updating an insecure "account"
+    }
+
+    register(data).catch(e => {
         const message = e.message || e;
         registrationFail.innerText = message;
         registrationFailSnackbar.open();
@@ -935,13 +972,8 @@ function togglePasswordVisibility(e) {
 }
 function updateFaceResult() {
     face__image.src = face.value || '';
-    if (face.value) {
-        face.classList.add('transparent');
-        face__image.classList.remove('hidden');
-    } else {
-        face.classList.remove('transparent');
-        face__image.classList.add('hidden');
-    }
+    useClass(face, 'transparent', face.value);
+    useClass(face__image, 'hidden', !face.value);
 }
 function showFaceResult(e) {
     if (e) e.preventDefault();
@@ -958,11 +990,13 @@ function showFaceResult(e) {
 
 var currentRegistrationDialog;
 function closeRegistration() { currentRegistrationDialog && currentRegistrationDialog.close(); }
-async function openRegistration() {
+async function openRegistration(isUpdate) {
     var credential = {};
     await initialSetUp;
     if (isRegistered) {
         credential = await confirmPassword(isRegistered).then(handleLoginResult);
+    } else if (isUpdate) {
+        credential = getUnregisteredCredentials();
     }
     if (!credential) return;
     openDialog(registration, dialog => {
@@ -971,9 +1005,20 @@ async function openRegistration() {
         oldEmail.value = email.value = credential.id || '';
         oldPassword.value = password.value = credential.password || '';
         strength.value = currentStrength;
-        register__submit.value = isRegistered ? "Update" : "Register";
-        strength.disabled = !isRegistered;
-        displayName.disabled = isRegistered && currentEnergy < 12;
+
+        // We don't want a value set in the password field when updating an unregistered "account", because
+        // the browser will ask to save it (confusing everyone).
+        if (isRegistered || !isUpdate) {
+            password.setAttribute('required', true);
+        } else {
+            password.removeAttribute('required');
+        }
+
+        useClass(registration, 'update', isUpdate);
+        register__submit.value = isUpdate ? "Update" : "Register";
+        displayName.disabled = isUpdate && currentEnergy < 12;
+        // FIXME remove, unless we decide to prevent unregistered users from changing their strength: strength.disabled = !isRegistered;
+
         const fields = instantiateFields(registration);
         const lists = instantiateAndLayoutLists(registration);
         updateFaceResult();
@@ -993,13 +1038,13 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const STIPEND_PER_DAY = 60;
 const DECAY_PER_DAY = -0.075;
 const DECAY_COMPOUNDINGS_PER_DAY = 1;
-function computeCreditsOnInterval(principle, ms) {
+function computeCreditsOnInterval(principle, ms, dailyStipend) {
     const t = ms / MILLISECONDS_PER_DAY;
     const rateAtCompounding = DECAY_PER_DAY / DECAY_COMPOUNDINGS_PER_DAY; // r/n in financial formulas
     const nCompoundings = DECAY_COMPOUNDINGS_PER_DAY * t;                // n*t in financial formulas
     const compoundGrowth = Math.pow(1 + rateAtCompounding, nCompoundings); // (1 + r/n)^(nt)
     const compoundInterestForPrinciple = principle * compoundGrowth;
-    const futureValueOfASeries = STIPEND_PER_DAY * (compoundGrowth - 1) / rateAtCompounding;
+    const futureValueOfASeries = dailyStipend * (compoundGrowth - 1) / rateAtCompounding;
     return compoundInterestForPrinciple + futureValueOfASeries;
 }
 
@@ -1030,7 +1075,7 @@ function formatCredits(energy) {
 // FIXME: should be randomized a bit to avoid synchronization
 function reportUserStats() {
     updateCounter = 0;
-    const data = {id: isRegistered, energy: currentEnergy};
+    const data = {id: isRegistered || getUnregisteredCredentials().id, energy: currentEnergy};
     if (mapLocation) data.location = mapLocation;
     service('/updateUserStats', data);
 }
@@ -1043,9 +1088,10 @@ function toggleMuted() {
 function updateEnergy() {
     var meterThisPeriod = muted ? 0 : currentStrength * Math.random();  // FIXME
     const consumptionThisPeriod = Math.max(0, Math.min(currentEnergy, meterThisPeriod * LINEAR_CONSUMPTION_METER_UNITS));
-    currentEnergy = computeCreditsOnInterval(currentEnergy, ENERGY_INTERVAL_MS) - consumptionThisPeriod;
+    const stipend = isRegistered ? STIPEND_PER_DAY : 0;
+    currentEnergy = computeCreditsOnInterval(currentEnergy, ENERGY_INTERVAL_MS, stipend) - consumptionThisPeriod;
 
-    if (isRegistered && !(++updateCounter % UPDATES_PER_REPORT)) reportUserStats();
+    if (!(++updateCounter % UPDATES_PER_REPORT)) reportUserStats();
     energyBarLinearProgress.progress = windowedAverage((consumptionThisPeriod / LINEAR_CONSUMPTION_METER_UNITS) / MAX_STRENGTH, consumptionBuffer);
     const averageEnergy = windowedAverage(currentEnergy, energyBuffer);
     energy.innerText = formatCredits(averageEnergy);
@@ -1065,6 +1111,8 @@ function gotoHash() {
     doDialog('#destinationGuide', destinationGuideDialog);
     if (is('#registration')) {
         openRegistration()
+    } else if (is('#changeInfo')) {
+        openRegistration(true);
     } else {
         closeRegistration();
     }

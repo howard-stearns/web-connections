@@ -22,7 +22,7 @@ process.title = "p2p-load-test";
 const app = express();
 const expressWs = require('express-ws')(app);
 app.set('trust proxy', true);
-const logger = morgan('dev'); // FIXME 'common');
+const logger = morgan(process.env.HEROKU ? 'short' : 'dev');
 pseudo.configure(logger);
 faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 const namesConfig = {
@@ -103,7 +103,6 @@ function removeDbString(id) { return fakeDbDelete(id); }
 const dbDesiredVersion = 7, dbVersionKey = 'dbVersion';
 getDbString(dbVersionKey).then(version => {
     console.log('Existing db version:', version, 'desired:', dbDesiredVersion);
-    if (!version) version = 0; // FIXME: just this once, and the remove
     if (version && (version < dbDesiredVersion)) {
         console.warn('Flushing database!');
         // FIXME: FLUSHDB for redis
@@ -203,8 +202,9 @@ userid => {displayName, credits, strength, passwordHash, meanDescriptor, emails,
 email1 => userid; email2 => userid; ...
 */
 function trimUser(user) { // What gets returned to user. FIXME: determine the minimum needed.
-    const cred = Object.assign({}, user);
-    cred.faces = cred.faces.slice(-1);
+    const cred = Object.assign({}, user), faces = cred.faces, last = faces.length - 1;
+    cred.faces = Array(faces.length).fill('...');
+    cred.faces[last] = faces[last];
     return user;
 }
 
@@ -222,11 +222,14 @@ function makeTransformer(existingKey) {
 const transformers = {
     email: makeTransformer('emails'),
     oldEmail: _ => {},
+    // Maybe FIXME: Eventually, we will probably want to NOT store faces. (Just the descriptors.)
+    // But until then, maybe we should make them available through a hash-named file (with a long cache expiration), rather than sending such big data strings back.
     face: makeTransformer('faces')
 };
 
 function passwordFail(user, options) {
     // Subtle: 'auth' in options is true if password is supplied at all, even as undefined.
+    // Subtle2: a password passed through json won't match an undefined user.password, but both undefined will.
     if (('auth' in options) && (user.password !== options.auth)) {
         // FIXME message?
         throw new Error("Password does not match.");
@@ -242,7 +245,7 @@ function elideParts(email, separator = '@', nchars = 5) {
 
 // Descriptors, and lists of descriptors, are stores in the database as json (to avoid complications of nexted values).
 async function matchesOtherFaceFail(userid, options) {
-    if (!options.descriptor) return null;
+    if (!options.descriptor && !options.auth) return null;
     await iterDbSet('ids', uid => {
         return getDbHash(uid).then(user => {
             if (!user || !user.meanDescriptor || uid === userid) return;
@@ -259,7 +262,7 @@ async function matchesOtherFaceFail(userid, options) {
 }
 function mismatchedFaceFail(user, options) {
     // Fails if given an empty options.descriptor. OK if not asked to check descriptor.
-    if (!('descriptor' in options)) return;
+    if (!('descriptor' in options) || !user.password) return;
     // FIXME message?
     if (!options.descriptor) return Promise.reject(new Error("Security selfie is not clear."));
     if (user.meanDescriptor) {
@@ -282,11 +285,16 @@ function updateMeanDescriptor(user, options) {
 }
 
 const NEARBY = 100; // meters
+const ANONYMOUS_URL = "images/anonymous.jpg"
 
 // Only the top level operations get locks, on email, and for get/set also on userid. (Nothing nested.)
 async function setUser(data, options) {
     const emailPointersToUpdate = [];
-    const emailKey = data.oldEmail || data.email;
+    // new reg: !user && data.email && options.password
+    // new insecure: !user && !data.email && !options.password
+    // update reg: data.email && user.password && (user.password === data.password) per passwordFail check.
+    // update insecure: data.email && !user.password
+    const emailKey = data.oldEmail || data.email || (uuidv4() + '@unregistered');
     var userid = await getDbString(emailKey);
     if (!userid) {  // Add pointer from email.
         userid = uuidv4();
@@ -300,7 +308,7 @@ async function setUser(data, options) {
             emailPointersToUpdate.push(data.email);
         }
         var user = await getDbHash(userid);
-        const fixmeDemoMarker = '@demo.fixme';
+        const fixmeDemoMarker = '@demo.fixmeHRS'; // INSECURE. (We don't check email address, yet.) So rip this out before deploy, or there will be free invites.
         if (user) {
             await passwordFail(user, options);
             await mismatchedFaceFail(user, options);
@@ -313,8 +321,18 @@ async function setUser(data, options) {
                 delete data.purchase;
             }
         } else {
-            await matchesOtherFaceFail(userid, options);
-            user = {};
+            if (data.email || data.password) { // New registration
+                await matchesOtherFaceFail(userid, options);
+                user = {credits: STIPEND_PER_DAY};
+            } else {
+                data.email = emailKey;
+                data.face = ANONYMOUS_URL;
+                user = { // create a new insecure user
+                    name: uniqueNamesGenerator(namesConfig),
+                    strength: 1,
+                    credits: 0 // destination will adjust this
+                };
+            }
             if (!data.email.endsWith(fixmeDemoMarker)) {
                 user.x = Math.floor(Math.random() * 1000);
                 user.y = Math.floor(Math.random() * 1000);
@@ -328,11 +346,9 @@ async function setUser(data, options) {
                 user.demoFollowId = fixme.emails[0];
             }
         }
-        var credits = computeCurrentCredits(user);
-        // FIXME: Is there enough info for the user? What charges? What is my current balance? Does energy indicator reflect that?
-        if (credits < newCharges) throw new Error("Insufficient credits.");
-        data.credits = credits - newCharges;
-        data.updated = Date.now();
+        const principle = ('auth' in options) ? user.credits : (data.credits || user.credits);
+        var credits = computeCurrentCredits(user, principle);
+        console.log('setUser credits old:', user.credits, 'computed:', credits, 'data:', data.credits);
         var destination;
         if (data.destination) {
             const invite = await getDbHash(data.destination);
@@ -343,14 +359,22 @@ async function setUser(data, options) {
             // check that host.x/y is near invite.x/y, and still online
             if (distance([invite.x, invite.y], [host.x, host.y]) < NEARBY) {
                 destination = {name: host.name, x: host.x, y: host.y};
+                if (!user.password && !credits) { // FIXME: instead of checking !credits, check that email has not already been seen.
+                    credits = invite.energy;
+                }
             } else {
                 destination = {name: host.name}; // Don't reveal the location.
             }
             delete data.destination;
         }
+        // FIXME: Is there enough info for the user? What charges? What is my current balance? Does energy indicator reflect that?
+        if (credits < newCharges) throw new Error("Insufficient credits.");
+        data.credits = credits - newCharges;
+        data.updated = Date.now();
+
         // Can't be done before security checks.
         var href;
-        if (data.invite) {
+        if (user.password && data.invite) {
             const inviteKey = uuidv4();
             const {followers:remaining, energy} = data.invite;
             await addToDbSet('invites', inviteKey);
@@ -577,8 +601,8 @@ const models = Promise.all([
     //faceapi.nets.ageGenderNet.loadFromDisk('public/models')
 ]);
 
-async function computeDescriptor(url) {
-    if (!url) return;
+async function computeDescriptor(url, registered = true) {
+    if (!registered) return;
     await models;
     const captured = await loadImage(url);
     const final = await faceapi.detectSingleFace(captured)
@@ -596,28 +620,29 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const STIPEND_PER_DAY = 60;
 const DECAY_PER_DAY = -0.075;
 const DECAY_COMPOUNDINGS_PER_DAY = 1;
-function computeCreditsOnInterval(principle, ms) {
+function computeCreditsOnInterval(principle, ms, dailyStipend) {
     const t = ms / MILLISECONDS_PER_DAY;
     const rateAtCompounding = DECAY_PER_DAY / DECAY_COMPOUNDINGS_PER_DAY; // r/n in financial formulas
     const nCompoundings = DECAY_COMPOUNDINGS_PER_DAY * t;                // n*t in financial formulas
     const compoundGrowth = Math.pow(1 + rateAtCompounding, nCompoundings); // (1 + r/n)^(nt)
     const compoundInterestForPrinciple = principle * compoundGrowth;
-    const futureValueOfASeries = STIPEND_PER_DAY * (compoundGrowth - 1) / rateAtCompounding;
+    const futureValueOfASeries = dailyStipend * (compoundGrowth - 1) / rateAtCompounding;
     return compoundInterestForPrinciple + futureValueOfASeries;
 }
 
 // FIXME NOT USED YET: const MINIMUM_OFFLINE_TIME = 20 * 1000; // /reportEnergy is every 15 seconds.
 // Does not side-effect user.
-function computeCurrentCredits(user) {
+function computeCurrentCredits(user, principle) {
     const now = Date.now();
-    var {credits = STIPEND_PER_DAY, updated = now} = user;
+    var {updated = now} = user;
     const elapsed = now - updated;
     // FIXME: If you buy credits and those are not applied until you are offline, or if you can by while
     // offline through another interface, then we need to to divide elapsed into 1+ nPurchases, and compute
     // compoundCreditsOnInterval with the previous principle (including purchases) and the elapsed
     // for that principle to the next.
-    if (elapsed < 100) return credits;
-    const computed = computeCreditsOnInterval(credits, elapsed);
+    if (elapsed < 100) return principle;
+    const stipend = user.password ? STIPEND_PER_DAY : 0;
+    const computed = computeCreditsOnInterval(principle, elapsed, stipend);
     return computed;
 }
 
@@ -637,7 +662,7 @@ app.post('/registration', function (req, res) {
     logParams(req, ['email']);
     const {id, oldEmail, name, iconURL, password, oldPassword, strength} = req.body;
     promiseResponse(res,
-                    computeDescriptor(iconURL).then(descriptor => {
+                    computeDescriptor(iconURL, !!password).then(descriptor => {
                         return setUser({email:id, oldEmail, displayName:name, face:iconURL, password, strength},
                                        {auth: oldPassword || password, descriptor: descriptor})
                             .then(trimUser);
@@ -645,13 +670,10 @@ app.post('/registration', function (req, res) {
 });
 app.post('/login', function (req, res) {
     logParams(req, ['id', 'destination']);
-    const {id, destination, password} = req.body;
+    const {id, destination, password} = req.body; // deconstruct and reconstruct, for security
     const data = {email: id};
     if (destination) data.destination = destination;
-    promiseResponse(res,
-                    id
-                    ? setUser(data, {auth: password}) // setUser to side-effect activity, get reflect current credits info
-                    : Promise.resolve({name: uniqueNamesGenerator(namesConfig), strength: 1, credits: 10}));
+    promiseResponse(res, setUser(data, {auth: password})); // setUser to side-effect activity, get current credits info
 });
 app.post('/delete', function (req, res) {
     logParams(req, ['id']);

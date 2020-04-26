@@ -48,7 +48,7 @@
           <div id="profilemenu" class="mdc-menu mdc-menu-surface">
             <nav class="mdc-list mdc-list--avatar-list" role="menu" aria-hidden="true" aria-orientation="vertical">
 
-              <a href="#registration" class="mdc-list-item" role="menuitem">
+              <a href="#changeInfo" class="mdc-list-item" role="menuitem">
                 <img id="profilemenu__image" class="mdc-list-item__graphic" aria-hidden="true"/>
                 <span class="mdc-list-item__text">
                   <span class="mdc-list-item__primary-text">Change info</span>
@@ -133,7 +133,7 @@
         </ul>
       </p>
       <h3>Demo Stuff</h3>
-      <p>For demonstration purposes, <a id="toggleTalking" href="#toggleTalking">stop talking</a>. (i.e., toggle the random simulated energy consumption)</p>
+      <p>For demonstration purposes, this link will <a id="toggleTalking" href="#toggleTalking">stop talking</a>. (i.e., toggle the random simulated energy consumption)</p>
       <p>There is a test user named '<span id="demoHostname1">host name</span>', perhaps representing a friend, or an artist that you follow IRL. (You are currently '<span id="demoYourOwnName">your name</span>'.) You can do four things relating to the test user:
         <ul>
           <li>
@@ -150,11 +150,11 @@
       </p>
 
       <h3>The Rules</h3>
-      <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. As is, the major features are:
+      <p>The purpose of this accounts demo is to have real working code to evaluate the underlying technical requirements. It is not meant to proposing a specific UX. But clearly these interact, and so it has to start somewhere. The items marked <span class="notImplemented">in red</span> are not demonstrated in this page:
         <ul class="implemented">
-          <li class="notImplemented">All use is accounted for (registered or not).</li>
-          <li>Credits are consumed by speaking, applying or resisting force, changing display name, teleporting, and by a decay of x%/interval (whether you're online or off).</li>
-          <li>You also get a constant credit stipend of 60 normal-minute-use each day. With the current decay rate of 7.5%/day, you will find that if you log off for a month, you'll be approaching 800 minutes of energy, regardless of whether you started at 0 or higher. The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.075 = 800.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day, then either the asymptote is 60 if the decay is large enough, or it blows up otherwise.)</i></li>
+          <li>Everyone is accounted for, e.g, wrt energy usage, regardless of whether registered or not. Unregistered accounts are are just not secured by a password or security-selfie, and have certain limitation such as not receiving a daily stipend. But unless noted otherwise, everyone follows the same rules.</li>
+          <li>Credits are consumed by speaking, applying or resisting force, changing display name, teleporting, and by a decay of (currently) 7.5%/day, whether you're online or off.</li>
+          <li>You also get a credit stipend of 60 normal-minute-use each day. With the current decay rate of 7.5%/day, you will find that if you log off for a month, you'll be approaching 800 minutes of energy, regardless of whether you started at 0 or higher. The asymptote is dailyGrant / dailyDecayFraction, e.g., 60 / 0.075 = 800.  <i>This works when we consider the daily stipend to be paid at the end of the day. (If we paid at the begining of each day - each compounding period - then a large enough decay rate sends everyone to 60, while a smaller rate ends up growing energy without bounds.)</i></li>
           <li>You can change your "strength" factor at any time, making you louder or more forceful, but making you burn credits faster while speaking or applying/resisting force.</li>
           <li>You cannnot consume credits you don't have, so regardless of "strength", your volume and force per unit time will decrease as you run very low.</li>
           <li class="notImplemented">An anonymous user will dissappear from the map when their energy becomes negligable. Registered users remain (although they might fade away after a time, TBD). In any case, users do not dissapear when they close their browser.</li>
@@ -171,40 +171,45 @@
       <h3>Much more to to do</h3>
       <p>This demo is a real implementation of accounts, <i>except</i>:
         <ul class="notImplemented">
-          <li>Scaling:
-            <ul>
-              <li>internal server db (redis instead of file-system-based hack db)</li>
-              <li>move to highfidelity.co? aws?</li>
-              <li>scale up energy and face check</li>
-              <li>unit tests</li>
-              <li>less data transfer (currently sending "everything" back and forth between client and server)</li>
-              <li>code cleanup</li>
-              <li>scale internal client db (localStorage is fine for now, but indexDb is better)</li>
-            </ul>
-          </li>
-          <li>Security:
-            <ul>
-              <li>internal keys</li>
-              <li>enforce energy consumption (needs keys). The demo is consuming randomly.</li>
-              <li>use hashed passwords on server, not raw. (Current is for debugging.)</li>
-            </ul>
-          </li>
           <li>Product:
             <ul>
+              <li>Whatever we decide about actual billing for invite, and keeping track of who has redeemed.</li>
+              <li>Design (and do we overhaul or tweak incrementally)</li>
+              <li>The computation for credits while offline needs to be broken up into intervals divided by the point in time in which you received credits from someone else.</li>
               <li>UI theme</li>
               <li>all the stuff that says "not implemented" when you click it, some of which has some interaction with identity and login</li>
               <li>language/localization</li>
               <li>accessibility. MDC has a bunch of support for Aria, but I skipped it for now. I <i>think</i> that all the stuff shown can be screen-reader accessible. (I'm also guessing that Apple or whomever comes up with a working "google glass" form-factor is going to lean on Aria or something like it.)</li>
-              <li>passwordless hardware login (keyfob or touchid), and/or "sign in with Apple". See note about passwords, below.</li>
+              <li>passwordless hardware login (keyfob or touch-id), and/or "sign in with Apple". See note about passwords, below.</li>
             </ul>
           </li>
           <li>Operations:
             <ul>
+              <li>Code cleanup - there's lot of hack stuff here, and bound to be bugs. (See also unit tests under "scaling", below.)</li>
               <li>failure tracking</li>
               <li>email service</li>
               <li>hubspot integration</li>              
               <li>credit card service</li>
-              <li>nofication (with service?) (interacts with add-to-home-screen)</li>
+              <li>notification (with service?) of buddy presence (also interacts with add-to-home-screen)</li>
+            </ul>
+          </li>
+          <li>Security:
+            <ul>
+              <li><b>There is no mechanism here yet for "recognizing" a nearby user (e.g., to give them credits).</b> The mechanism should be provable against impersonation, not reveal PII (like email). I think it should also either not allow tracking, or let the recognized person approve/revoke the tracking. I'm confident that all this can be done with the following item, but is not implemented in the current code.</li>
+              <li>crypto under the hood rather than passwords</li>
+              <li>enforce energy consumption (at mixer, using authentication). The demo is consuming randomly.</li>
+              <li>use hashed passwords on server, not raw. (Current is for debugging.)</li>
+              <li>password storage discussion... (but let's defer until the dust settles)</li>
+            </ul>
+          </li>
+          <li>Scaling:
+            <ul>
+              <li>internal server db (redis instead of file-system-based hack db)</li>
+              <li>move to highfidelity.co? aws?</li>
+              <li>unit tests</li>
+              <li>less data transfer (currently sending "everything" back and forth between client and server)</li>
+              <li>the server-side implementation of energy-check and face-check should be good for several thousands, but not for really big numbers</li>
+              <li>scale internal client db (localStorage is fine for now, but indexDb is better)</li>
             </ul>
           </li>
         </ul>
@@ -222,6 +227,7 @@
         <li>Try browser refresh and back/forward in various cases. There are some very subtle cases when the browser has multiple accounts stored.</li>
       </ol>
       -->
+      <!--
       <h3>Passwords and Login</h3>
       <p>Quick discussion of passwords:
         <ol>
@@ -236,6 +242,7 @@
           <li>So, that leaves passwords. There's a W3C browser API for managing that in a sensible way, which I've used where it exists. Alas, it doesn't exist on Firefox or Safari yet, so I've simulated it myself. This is what you see in the demo on these browsers. <i>However...</i> to do, I've stored the user's password in site-specific storage in the browser, rather than in the non-existent password credential manager. Is anyone going to freak about that? The alternative is to not save the password in my storage, but instead make the user enter the password each time in a form, which will be autofilled from the browser anyway. I've implemented that, too, so that you can compare. Go to <a href="https://web-connections.herokuapp.com/account.html?store-passwords=false">/account.html?store-passwords=false</a> to try out that version.</li>
         </ol>
       </p>
+    -->
     </div>
     
     <!-- Dialogs  -->
@@ -542,18 +549,14 @@
         <div class="mdc-dialog__surface"
              role="alertdialog"
              aria-modal="true"
-             aria-labelledby="registration-title"
+             aria-labelledby="registration__title"
              aria-describedby="registration-content">
             
             <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
-            <h2 class="mdc-dialog__title" id="registration-title"><span class="onlyRegistered">Update </span>Registration</h2>
+            <h2 class="mdc-dialog__title" id="registration__title"><span class="onlyUpdate">Update</span><span class="onlyNewRegistration">Registration</span></h2>
             <div class="mdc-dialog__content" id="registration-content">
-              <div class="onlyUnregistered">
-                <p>Registration is free.</p>
-                <p>Only registered users can change their strength multiplier, or get more <a href="#energy">energy</a>.</p>
-              </div>
-              <div class="onlyRegistered">
-                You can change any of these current settings.
+              <div class="onlyNewRegistration">
+                <p>Registration is free. Only registered users can invite others or get more <a href="#energy">energy</a>.</p>
               </div>
 
               <fieldset>
@@ -598,7 +601,7 @@
                 </ul>
               </fieldset>
 
-              <fieldset>
+              <fieldset class="notUnregisteredUpdate">
                 <legend class="mdc-typography mdc-typography--body2">
                   Private - not shared with anyone
                 </legend>
@@ -626,7 +629,7 @@
                   <li class="mdc-list-item">
                     <div class="list-item__text-field-container">
                       <label id="password__label" class="mdc-text-field mdc-text-field--outlined mdc-text-field--with-trailing-icon" for="password">
-                        <input id="password" type="password" class="mdc-text-field__input" aria-labelledby="password__floatingLabel" autocomplete="new-password" required>
+                        <input id="password" type="password" class="mdc-text-field__input" aria-labelledby="password__floatingLabel" autocomplete="new-password">
                         <button id="passwordVisibility" class="mdc-icon-button material-icons mdc-text-field__icon mdc-text-field__icon--trailing">visibility</button>
                         <div id="password__outline" class="mdc-notched-outline">
                           <div class="mdc-notched-outline__leading"></div>
@@ -664,6 +667,10 @@
                   
                 </ul>
               </fieldset>
+              <div class="onlyUnregisteredUpdate">
+                <p>Or you can <a href="#registration">register</a> for free. Only registered users can invite others or get more <a href="#energy">energy</a>.</p>
+              </div>
+
               
             </div>
             <footer class="mdc-dialog__actions">

@@ -67,6 +67,12 @@ li.notImplemented,
 .mdc-linear-progress__bar-inner {
     border-color: var(--mdc-theme-secondary);
 }
+body:not(.registered) #registration.update .notUnregisteredUpdate,
+body:not(.registered) #registration:not(.update) .onlyUnregisteredUpdate,
+#registration:not(.update) .onlyUpdate,
+#registration.update .onlyNewRegistration {
+    display: none;
+}
 body.registered .onlyUnregistered {
     display: none;
 }
