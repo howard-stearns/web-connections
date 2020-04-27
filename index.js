@@ -3,6 +3,7 @@ const PORT = process.env.PORT || 8443;
 const path = require('path');
 const fs = require('fs');
 const url = require('url');
+const crypto = require('crypto');
 const { exec } = require("child_process");
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -81,76 +82,94 @@ function makeResolver(resolve, reject, datafier) {
         resolve(!e && datafier && datafier(data));
     };
 }
+
+// Let's try this in progressive levels of goodness:
+var redis1 = false;
+var redis2 = false;
+
 const fakeDb = {};
 function fakeDbSet(key, val) {
+    if (redis1) return setDbString(key, JSON.stringify(val))
     fakeDb[key] = val;
     return new Promise((resolve, reject) => fs.writeFile(dbPath(key), JSON.stringify(val), makeResolver(resolve, reject)));
 }
 function fakeDbGet(key) {
+    if (redis1) return getDbString(key).then(JSON.parse)
     const cached = fakeDb[key];
     if (cached) return Promise.resolve(cached);
     return new Promise((resolve, reject) => fs.readFile(dbPath(key), makeResolver(resolve, reject, JSON.parse)));
 }
 function fakeDbDelete(key) {
+    if (redis1) return removeDbString(key);
     delete fakeDb[key];
     return new Promise((resolve, reject) => fs.unlink(dbPath(key), makeResolver(resolve, reject)));
 }
 
-function getDbString(id) { return fakeDbGet(id); }
-function setDbString(id, value) { return fakeDbSet(id, value); }
-function removeDbString(id) { return fakeDbDelete(id); }
-
-const dbDesiredVersion = 7, dbVersionKey = 'dbVersion';
-getDbString(dbVersionKey).then(version => {
-    console.log('Existing db version:', version, 'desired:', dbDesiredVersion);
-    if (version && (version < dbDesiredVersion)) {
-        console.warn('Flushing database!');
-        // FIXME: FLUSHDB for redis
-        const command = `rm -f ${dbdir}/*`;
-        exec(command, (...results) => { // there are no subdirs // FIXME rm -f
-            console.log(command, '=>', ...results);
-            setDbString(dbVersionKey, dbDesiredVersion);
+function redisPromise(op, ...args) {
+    return new Promise((resolve, reject) => {
+        redis[op](...args, (error, data) => {
+            if (error) return reject(error);
+            resolve(data);
         });
-    } else if (!version) {
-        console.info('Creating db');
-        setDbString(dbVersionKey, dbDesiredVersion);
-    }
-});
+    });
+}
+function getDbString(id) {
+    if (redis1) return redisPromise('get', id)
+    return fakeDbGet(id);
+}
+function setDbString(id, value) {
+    if (redis1) return redisPromise('set', id, value);
+    return fakeDbSet(id, value);
+}
+function removeDbString(id) {
+    if (redis1) return redisPromise('del', id);
+    return fakeDbDelete(id);
+}
 
-async function addToDbSet(set, element) {
+async function addToDbSet(set, stringElement) {
+    if (redis2) return redisPromise('sadd', set, stringElement);
     var ids = await fakeDbGet(set);
     if (!ids) ids = [];
-    if (!ids.includes(element)) {
-        ids.push(element);
+    if (!ids.includes(stringElement)) {
+        ids.push(stringElement);
         await fakeDbSet(set, ids);
     }
 }
-async function removeFromDbSet(set, element) {
+async function removeFromDbSet(set, stringElement) {
+    if (redis2) return redisPromise('srem', set, stringElement);
     var ids = await fakeDbGet(set);
     if (!ids) ids = [];
-    ids.splice(ids.indexOf(element), 1);
+    ids.splice(ids.indexOf(stringElement), 1);
     await fakeDbSet(set, ids);
 }
-async function iterDbSet(set, func) { // wait for func(element) of each member of the set (unless error along the way)
-    var ids = await fakeDbGet(set);
+async function iterDbSet(set, func) { // wait for func(stringElement) of each member of the set (unless error along the way)
+    var ids;
+    if (redis2) { // FIXME: we can do better
+        ids = await redisPromise('smembers', set);
+    } else {
+        ids = await fakeDbGet(set);
+    }
     if (!ids) return;
     for (const id of ids) {
         await func(id);
     }
 }
 
-async function addToDbOrderedSet(set, element) {
+async function addToDbList(set, stringElement) {
+    if (redis2) return redisPromise('rpush', set, stringElement);
     var ids = await fakeDbGet(set);
     if (!ids) ids = [];
-    if (!ids.includes(element)) {
-        ids.push(element);
+    if (!ids.includes(stringElement)) {
+        ids.push(stringElement);
         await fakeDbSet(set, ids);
     }
 }
-function getDbOrderedSet(set) {
+function getDbList(set) {
+    if (redis2) return redisPromise('lrange', set, 0, -1);
     return fakeDbGet(set);
 }
-function removeDbOrderedSet(set) {
+function removeDbList(set) {
+    if (redis2) return redisPromise('del', set);
     return fakeDbDelete(set);
 }
 
@@ -168,7 +187,7 @@ async function getDbHash(uid) {
     const hash = Object.assign({}, raw);
     for (const [key, val] of Object.entries(hash)) {
         if (isSubList(uid, val)) {
-            hash[key] = await getDbOrderedSet(val);
+            hash[key] = await getDbList(val);
         }
     }
     return hash
@@ -177,7 +196,7 @@ async function removeDbHash(uid) {
     const raw = await fakeDbGet(uid);
     if (!raw) return;
     for (const [key, val] of Object.entries(raw)) {
-        if (isSubList(uid, val)) await removeDbOrderedSet(val);
+        if (isSubList(uid, val)) await removeDbList(val);
     }
     await fakeDbDelete(uid);
 }
@@ -186,11 +205,45 @@ async function setDbHash(uid, hash) {
     for (const [key, val] of Object.entries(raw)) {
         if (!Array.isArray(val)) continue;
         const subkey = subListKey(uid, key);
-        val.forEach(async element => { await addToDbOrderedSet(subkey, element); });
+        val.forEach(async element => { await addToDbList(subkey, element); });
         raw[key] = subkey;
     }
-    fakeDbSet(uid, raw);
+    await fakeDbSet(uid, raw);
 }
+
+
+async function flushSet(name, logOnly = false) {
+    await iterDbSet(name, async (uid) => {
+        const hash = await getDbHash(uid);
+        console.log(uid, JSON.stringify(hash).slice(0, 80), '...');
+        if (!logOnly) await removeDbHash(uid);
+    });
+    if (!logOnly) await redisPromise('del', name);
+}
+
+const dbDesiredVersion = 8, dbVersionKey = 'dbVersion';
+getDbString(dbVersionKey).then(async version => {
+    console.log('Existing db version:', version, 'desired:', dbDesiredVersion);
+    if (version && (version < dbDesiredVersion)) {
+        console.warn('Flushing database!');
+        // FIXME: FLUSHDB for redis
+        if (redis) {
+            await flushSet('invites');
+            await flushSet('ids');
+            console.log('flushed');
+        } else {
+            const command = `rm -f ${dbdir}/*`;
+            exec(command, (...results) => { // there are no subdirs // FIXME rm -f
+                console.log(command, '=>', ...results);
+                setDbString(dbVersionKey, dbDesiredVersion);
+            });
+        }
+    } else if (!version) {
+        console.info('Creating db');
+        setDbString(dbVersionKey, dbDesiredVersion);
+    }
+});
+
 
 // Higher level operations on our specific db
 // FIXME: there are opportunities for optimization here:
@@ -213,7 +266,7 @@ function listify(entry, existingKey, existing) {
     if (!list) {
         list = existing[existingKey] = [];
     }
-    if (list.includes(entry)) return;
+    if (list.includes(entry)) return;  // FIXME: we actually want it last (e.g., if someone goes back to an earlier email)
     list.push(entry);
 }
 function makeTransformer(existingKey) {
@@ -286,6 +339,23 @@ function updateMeanDescriptor(user, options) {
 
 const NEARBY = 100; // meters
 const ANONYMOUS_URL = "images/anonymous.jpg"
+async function redeem(userid, inviteid, invite) {
+    var redeemed = invite.redeemed;
+    if (!redeemed) redeemed = invite.redeemed = [];
+    console.log('redeem', userid, inviteid, invite, redeemed.length, invite.followers);
+    if (redeemed.includes(userid)) {
+        console.log('redeem has already seen', userid, 'in', redeemed);
+        return true;
+    }
+    if (redeemed.length < invite.followers) {
+        console.log('new redeemer', redeemed);
+        redeemed.push(userid);
+        console.log('redeem saving', invite);
+        await setDbHash(inviteid, invite);
+        return true;
+    }
+    return false;
+}
 
 // Only the top level operations get locks, on email, and for get/set also on userid. (Nothing nested.)
 async function setUser(data, options) {
@@ -336,9 +406,11 @@ async function setUser(data, options) {
             if (!data.email.endsWith(fixmeDemoMarker)) {
                 user.x = Math.floor(Math.random() * 1000);
                 user.y = Math.floor(Math.random() * 1000);
+                const demoId = userid + fixmeDemoMarker;
                 let fixme = await setUser({
+                    email: demoId,
+                    password: demoId,
                     name: uniqueNamesGenerator(namesConfig),
-                    email: userid + fixmeDemoMarker,
                     x: 100,
                     y: 100
                 }, {});
@@ -346,24 +418,36 @@ async function setUser(data, options) {
                 user.demoFollowId = fixme.emails[0];
             }
         }
-        const principle = ('auth' in options) ? user.credits : (data.credits || user.credits);
+        const principle = ('auth' in options) ? user.credits : data.credits;
         var credits = computeCurrentCredits(user, principle);
-        console.log('setUser credits old:', user.credits, 'computed:', credits, 'data:', data.credits);
+        console.log('setUser credits old:', user.credits, 'computed:', credits, 'data:', data.credits, 'auth:', 'auth' in options);
         var destination;
         if (data.destination) {
             const invite = await getDbHash(data.destination);
             if (!invite) throw new Error(`No such invitation ${data.destination}.`);
             const host = await getDbHash(invite.userid);
             if (!host) throw new Error(`No host for invitation ${data.destination}.`);
-            // FIXME: count down invite.remaining, but don't double count reloads.
-            // check that host.x/y is near invite.x/y, and still online
-            if (distance([invite.x, invite.y], [host.x, host.y]) < NEARBY) {
-                destination = {name: host.name, x: host.x, y: host.y};
-                if (!user.password && !credits) { // FIXME: instead of checking !credits, check that email has not already been seen.
-                    credits = invite.energy;
+            destination = {name: host.displayName}; // Don't reveal the location yet
+            if (distance([invite.x, invite.y], [host.x, host.y]) < NEARBY) { // FIXME: should we also check that they are still online?
+                let allow = user.password;
+                console.log('redeeming invite from', host.displayName, 'by', data.name || user.displayName || user.name, 'with', user.password);
+                if (!allow) {
+                    if (await redeem(userid, data.destination, invite)) {
+                        console.log('redeemed');
+                        if (!credits) credits += invite.energy;
+                        allow = true;
+                    } else {
+                        destination.reason = 'sold out';
+                        pseudo.info({url: `/redeem?invite=${data.destination}&reason=sold`, statusCode: 400});                        
+                    }
+                }
+                if (allow) {
+                    destination.x = host.x;
+                    destination.y = host.y;
                 }
             } else {
-                destination = {name: host.name}; // Don't reveal the location.
+                destination.reason = 'left';
+                pseudo.info({url: `/redeem?invite=${data.destination}&reason=left`, statusCode: 400});
             }
             delete data.destination;
         }
@@ -376,9 +460,9 @@ async function setUser(data, options) {
         var href;
         if (user.password && data.invite) {
             const inviteKey = uuidv4();
-            const {followers:remaining, energy} = data.invite;
+            const {followers, energy} = data.invite;
             await addToDbSet('invites', inviteKey);
-            await setDbHash(inviteKey, {remaining, energy, userid: userid, x: user.x, y: user.y});
+            await setDbHash(inviteKey, {followers, energy, userid: userid, x: user.x, y: user.y});
             // FIXME? We will probably want to also keep track of the invites of each user.
             href = options.base + `?invite=${inviteKey}`;
             delete data.invite;
@@ -616,6 +700,19 @@ async function computeDescriptor(url, registered = true) {
     return [...final.descriptor]; // spread to a normal array
 }
 
+const facedir = path.join(__dirname, 'public', 'faces');
+fs.mkdir(facedir, e => e && (e.code !== 'EEXIST') && console.error(e));
+async function replaceFace(dataurl) {
+    if (!dataurl) return;
+    const base64Data = dataurl.replace(/^data:image\/png;base64,/,""),
+          binaryData = new Buffer.from(base64Data, 'base64').toString('binary'),
+          hash = crypto.createHash('sha256');
+    hash.update(base64Data);
+    const id = hash.digest('hex') + '.png';  // We want identical data to be the identical url.
+    await new Promise((resolve, reject) => fs.writeFile(path.join(facedir, id), binaryData, "binary", makeResolver(resolve, reject)));
+    return 'faces/' + id;
+}
+
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const STIPEND_PER_DAY = 60;
 const DECAY_PER_DAY = -0.075;
@@ -662,8 +759,9 @@ app.post('/registration', function (req, res) {
     logParams(req, ['email']);
     const {id, oldEmail, name, iconURL, password, oldPassword, strength} = req.body;
     promiseResponse(res,
-                    computeDescriptor(iconURL, !!password).then(descriptor => {
-                        return setUser({email:id, oldEmail, displayName:name, face:iconURL, password, strength},
+                    computeDescriptor(iconURL, !!password).then(async descriptor => {
+                        const face = await replaceFace(iconURL); // Don't put data urls in the db.
+                        return setUser({email:id, oldEmail, displayName:name, face, password, strength},
                                        {auth: oldPassword || password, descriptor: descriptor})
                             .then(trimUser);
                     }));

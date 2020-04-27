@@ -123,15 +123,6 @@
     <div class="mdc-drawer-scrim"></div>
     <!-- CONTENT -->
     <div class="mdc-top-app-bar--fixed-adjust">
-      <p>FIXME: immediate todo, before larger discussion
-        <ul>
-          <li>all users have accounting (registered or not), and can make changes</li>
-          <li>normal url (force sign in or registration, display guide)</li>
-          <li>don't allow second registration - what consequences for user selection???</li>
-
-          <li>redis db (and remove redis in todo below)</li>
-        </ul>
-      </p>
       <h3>Demo Stuff</h3>
       <p>For demonstration purposes, this link will <a id="toggleTalking" href="#toggleTalking">stop talking</a>. (i.e., toggle the random simulated energy consumption)</p>
       <p>There is a test user named '<span id="demoHostname1">host name</span>', perhaps representing a friend, or an artist that you follow IRL. (You are currently '<span id="demoYourOwnName">your name</span>'.) You can do four things relating to the test user:
@@ -161,9 +152,9 @@
           <li>One account per person, registered on as many browsers as they want to use. (No ui to make a second registration on same browser, and registration compares faces.) A new registered user starts with 60 minutes of credit.</li>
           <li>A registered user gets paid at a constant rate, whether or not they are in-world, an amount equal to 60 minutes of normal use. They can also buy more (or perhaps contribute resources).</li>
           <li>A registered user can create a URL to be used by their choice of N people, giving them each up to M minutes of normal use. (Default 10 minutes.) It is valid only while the host is near the spot (say 100m) they were in when they created the URL. (Host can leave and come back.) QR code is the same.</li>
-          <li class="notImplemented">When a user follows that link, they can sign in, or just remain anonymous. If the latter, they will only be able to speak or move for the M minutes paid for by their host. Registering or signing in does not get the unused portion of the original M minutes. However, N * M minutes are charged to the host as soon as they create the link (whether or not the eventual followers are registered).</li>
-          <li class="notImplemented">Pasting in a normal (non-guest) URL will show you the map, but requires you to either sign in or register.</li>
-          <li>Following a URL with a location (guest URL or otherwise) puts you at your last location (or a random spawn point if none, TBD), and displays a marker to guide you to the destination. You can walk in that direction, or click the marker to teleport for a fee (say, 10 min, regardless of distance).</li>
+          <li>When a user follows that link, they can sign in, or just remain anonymous. If the latter, they will only be able to speak or move for the M minutes paid for by their host. Registering or signing in does not get the unused portion of the original M minutes. However, N * M minutes are charged to the host as soon as they create the link (whether or not the eventual followers are registered).</li>
+          <li>Pasting in a normal (non-guest) URL will show you the map, but requires you to either sign in or register.</li>
+          <li>Following a URL with a location (guest URL or otherwise) puts you at your last location (or a random spawn point if none, TBD), and displays a marker to guide you to the destination. You can walk in that direction, or click the marker to teleport for a fee (say, 5 credits, regardless of distance).</li>
           <li class="notImplemented">All users (registered or not) can give credits to any user they are near (registered or not).</li>
           <li>Although this is a "single-page app", the URLs all work through reload, and back/forward buttons (while adjusting for current login state).</li>
         </ul>
@@ -204,7 +195,7 @@
           </li>
           <li>Scaling:
             <ul>
-              <li>internal server db (redis instead of file-system-based hack db)</li>
+              <li>internal server db (I'm currently using file system on server, and am working through some issues with redis.)</li>
               <li>move to highfidelity.co? aws?</li>
               <li>unit tests</li>
               <li>less data transfer (currently sending "everything" back and forth between client and server)</li>
@@ -290,6 +281,29 @@
       </div>
       <div class="mdc-dialog__scrim"></div>
     </div>
+    <div id="mustRegister" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+        <div class="mdc-dialog__surface"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="not-implement-title"
+             aria-describedby="not-implemented-content">
+          <!-- Title cannot contain leading whitespace due to mdc-typography-baseline-top() -->
+          <h2 class="mdc-dialog__title" id="not-implement-title">Welcome :-)</h2>
+          <div class="mdc-dialog__content">
+            <p>You are in an open field west of a big white house with a boarded front door. There is a small mailbox here.</p>
+            <p>Actually, you've arrived without an invite. You have no energy, and can't do anything. Either get an invite, or <a href="#registration">register</a>.</p>
+          </div>
+          <footer class="mdc-dialog__actions">
+            <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="yes">
+              <div class="mdc-button__ripple"></div>
+              <span class="mdc-button__label">OK</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+      <div class="mdc-dialog__scrim"></div>
+    </div>
     <div id="privacy" class="mdc-dialog">
       <div class="mdc-dialog__container">
         <div class="mdc-dialog__surface"
@@ -328,7 +342,7 @@
           <div class="mdc-dialog__content">
             <p>You have been invited by <span id="destinationHost"></span> to visit near <span id="destinationLocation"></span>, but you are at <span id="yourLocation"></span>.</p>
             <p>The guide isn't implemented yet. In the app, it should point you in the right direction, and give you the distance.</p>
-            <p>You also have the option to teleport there directly for a cost of 10 energy units.</p>
+            <p>You also have the option to teleport there directly for a cost of 5 energy units.</p>
           </div>
           <footer class="mdc-dialog__actions">
             <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="cancel">
@@ -445,7 +459,7 @@
               <li class="mdc-list-item">
                 <div class="list-item__text-field-container">
                   <label id="selectPassword__label" class="mdc-text-field mdc-text-field--outlined mdc-text-field--with-trailing-icon" for="password">
-                    <input id="selectPassword" type="password" class="mdc-text-field__input" aria-labelledby="password__floatingLabel" autocomplete="current-password" required>
+                    <input id="selectPassword" type="password" class="mdc-text-field__input" aria-labelledby="password__floatingLabel" autocomplete="off" required>
                     <button id="selectPasswordVisibility" class="mdc-icon-button material-icons mdc-text-field__icon mdc-text-field__icon--trailing">visibility</button>
                     <div id="selectPassword__outline" class="mdc-notched-outline">
                       <div class="mdc-notched-outline__leading"></div>

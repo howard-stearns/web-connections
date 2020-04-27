@@ -44,18 +44,18 @@ function storeLocalCredential(credential) {
 // The PasswordCredential API is not implemented in Safari or Firefox yet.
 // This uses the API when available, otherwise we recreate the same API, with similar UI.
 function browserHasPasswordCredentialStore() {
-    //return false; // FIXME: for now, let's lean on our home-grown stuff so that it gets excercised.
-    return 'PasswordCredential' in window;  // Seems to be true just for Chrome.
+    return false; // FIXME: for now, let's lean on our home-grown stuff so that it gets excercised.
+    //return 'PasswordCredential' in window;  // Seems to be true just for Chrome.
 }
 const DELETED_CREDENTIAL_PROPERTY_VALUE = 'deleted';
 function deleteCredential(id) {
     setCredential({id, password: DELETED_CREDENTIAL_PROPERTY_VALUE,
                    name: DELETED_CREDENTIAL_PROPERTY_VALUE});
 }
-const dbVersion = 6;
+const dbVersion = 8;
 var version = getDb('version');
 if (version && (version < dbVersion)) {
-    alert('Clearing local db. You should clear your browser passwords for https://web-connections.herokuapp.com. (Ask Howard.)');
+    alert('Clearing local db. You should probably clear your browser passwords for https://web-connections.herokuapp.com before proceeding! (E.g., chrome://settings/passwords and look for web-connection.herokuapp - Ask Howard.)');
     if (browserHasPasswordCredentialStore()) {
         getIds().forEach(deleteCredential);
     }
@@ -134,7 +134,8 @@ function setUnregisteredCredentials(credentials) {
 function unregisteredLogin() {
     // FIXME: do we have what we need in cookies? Do we need to contact the server again?
     setRegistered(false);
-    const credentials = getUnregisteredCredentials();
+    const credentials = Object.assign({}, getUnregisteredCredentials());
+    addInviteToCredentials(credentials);
     return service('/login', credentials, {  // UI should still work on failure.
         iconURL: "images/anonymous.jpg",
         name: "anonymous"
@@ -145,7 +146,7 @@ function unregisteredLogin() {
 function passwordLogin(credential) {
     const {id, password} = credential, data = {id, password};
     setRegistered(id);
-    if (loginInvite) data.destination = loginInvite;
+    addInviteToCredentials(data);
     return service('/login', data, credential)
 }
 // All of the given options are passed to /registration:
@@ -155,14 +156,14 @@ function passwordLogin(credential) {
 function createOrUpdateRegistration(options) { // on server
     setRegistered(options.id);
     const data = Object.assign({}, options);
-    if (loginInvite) data.destination = loginInvite;
+    addInviteToCredentials(data);
     return service('/registration', data, options);
 }
 
 function recordChanges(user) {
     // Make note of changes, side effecting user so that new values are in the right properties for storage.
     // Also gives us a chance to log changes or tell the user.
-    function last(list) { return list[list.length - 1]; }
+    function last(list) { return list && list[list.length - 1]; }
     let changes = [],
         email = last(user.emails),
         face = last(user.faces);
@@ -176,6 +177,9 @@ function recordChanges(user) {
     if (noteNew(email, 'id', 'email')) removeDb(user.id); // storeCredentials will restore.
     noteNew(user.displayName, 'name');
     noteNew(face, 'iconURL', 'security selfie');
+    if (user.iconURL && !user.iconURL.startsWith('data:')) {
+        user.iconURL = new URL(user.iconURL, location.href).href;
+    }
     // We can't make note of a new password, and we don't need to.
     if ((user.credits - currentEnergy) > 1) changes.push('credits'); // FIXME: but is it worthy notifying user?
     noteChanges(changes);
@@ -782,13 +786,15 @@ function notifyLoggedOut(notify) {
 }
 function noteChanges(changes) {
     console.log('changed:', ...changes);
-    return; // FIXME: this is just confusing things. Rip it out, or make it clearer.
+    // FIXME: snackbar  is just confusing things. Rip it out, or make it clearer.
+    /*
     if (!changes.length) return;
     const label = (changes.length > 1)
         ? changes.slice(0, -1).join(', ') + ' and ' + changes[changes.length - 1]
           : changes[0];
     changed__label.innerText = `Changed ${label}.`;
     changedSnackbar.open();
+    */
 }
 
 function setRegistered(id) {
@@ -812,6 +818,9 @@ function resetDestinationData() {
     loginInvite = href.searchParams.get('invite');
     mapLocation = destination = false;
 }
+function addInviteToCredentials(credentials) {
+    if (loginInvite) credentials.destination = loginInvite;
+}
 function setLocation(x, y, removeInvite = false) {
     if ((x === undefined) || (y === undefined)) return;
     mapLocation = {x, y};
@@ -819,6 +828,7 @@ function setLocation(x, y, removeInvite = false) {
     params.set('x', x);
     params.set('y', y);
     if (removeInvite) params.delete('invite');
+    console.log('fixme setLocation', removeInvite, params);
     history.replaceState({}, document.title, location.pathname + '?' + params + location.hash);
 }
 function teleport() {
@@ -827,7 +837,7 @@ function teleport() {
     // FIXME: Here we set energy and mapLocation to be picked up by reportUserStats. In thereal implementation, we would communicate
     // with the world simulator or audio mixer to have them report our position, subject to collisions and such.
     destination = null;
-    currentEnergy -= 10;
+    currentEnergy -= 5;
     setLocation(x, y, true);
     guide.classList.add('hidden');
     reportUserStats();
@@ -853,6 +863,11 @@ function announceDeparted(hostname) {
     arrived__label.innerText =`${hostname} is no longer present.`;
     arrivedSnackbar.open();
 }
+function announceSoldOut(hostname) {
+    console.log(hostname, 'sold out');
+    arrived__label.innerText =`The invitation from ${hostname} has exceeded capacity.`;
+    arrivedSnackbar.open();
+}
 var fixmeDemoFollowId;
 function setupUser(credential) {
     var {name, iconURL, credits, strength, demoFollowName, demoFollowId, x, y, destination:invite} = credential;
@@ -868,21 +883,29 @@ function setupUser(credential) {
     if (invite) {
         console.log('invite', invite.x, invite.y, x, y);
         if ((invite.x === undefined) || (invite.y === undefined)) { // The host has moved.
-            announceDeparted(invite.name);
+            if (invite.reason === 'sold out') {
+                announceSoldOut(invite.name);
+            } else {
+                announceDeparted(invite.name);
+            }
             invite = false;
         } else if (distance([x, y], [invite.x, invite.y]) < NEARBY) {
             announceArrival(invite.name);
             invite = false;
         }
     }
-    setLocation(x, y, !invite);
     useClass(guide, 'hidden', !invite);
     if (invite) {
+        console.log('invite!', invite);
         destination = invite;
         destinationHost.innerText = destination.name;
         destinationLocation.innerText = `${destination.x}, ${destination.y}`;
         yourLocation.innerText = `${x}, ${y}`;
+        setTimeout(_ => location.hash = 'destinationGuide', 100);
+    } else if (!credits) {
+        setTimeout(_ => location.hash = 'mustRegister', 100);
     }
+    setLocation(x, y, !invite);
     return credential;
 }
 function onAppdrawerClosed() {
@@ -1106,6 +1129,7 @@ function gotoHash() {
     doDialog('#energy', creditsDialog);
     doDialog('#notImplementedIndependent', notImplementedIndependentDialog);
     doDialog('#notImplementedDependent', notImplementedDependentDialog);
+    doDialog('#mustRegister', mustRegisterDialog);
     doDialog('#share', shareDialog);
     doDialog('#privacy', privacyDialog);
     doDialog('#destinationGuide', destinationGuideDialog);
@@ -1128,7 +1152,7 @@ function gotoHash() {
         logOut({preventSilentAccess: true, notify: false});
         break;
     case '#createDemoLink':
-        service('/createInvite', {id: fixmeDemoFollowId, energy: 10, followers: 100}).then(link => {
+        service('/createInvite', {id: fixmeDemoFollowId, password: fixmeDemoFollowId, energy: 10, followers: 100}).then(link => {
             demoLink.href = link.href;
             demoLink.innerText = demoHostPosition;
             location.hash = '';
@@ -1183,6 +1207,7 @@ const shareDialog = new MDCDialog(share);
 const destinationGuideDialog = new MDCDialog(destinationGuide);
 const notImplementedIndependentDialog = new MDCDialog(notImplementedIndependent);
 const notImplementedDependentDialog = new MDCDialog(notImplementedDependent);
+const mustRegisterDialog = new MDCDialog(mustRegister);
 const creditsDialog = new MDCDialog(credits);
 const webcamDialog = new MDCDialog(webcam);
 const profileRipple = new MDCRipple(profile);
@@ -1204,6 +1229,7 @@ if ((location.protocol !== 'https:') && (location.hostname !== 'localhost')) ale
 [
     [notImplementedIndependentDialog, 'MDCDialog:closed', '#notImplementedIndependent'],
     [notImplementedDependentDialog, 'MDCDialog:closed', '#notImplementedDependent'],
+    [mustRegisterDialog, 'MDCDialog:closed', '#mustRegister'],
     [privacyDialog, 'MDCDialog:closed', '#privacy'],
     [shareDialog, 'MDCDialog:closed', '#share'],
     [destinationGuideDialog, 'MDCDialog:closed', '#destinationGuide'],
