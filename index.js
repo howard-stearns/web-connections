@@ -227,7 +227,7 @@ getDbString(dbVersionKey).then(async version => {
     if (version && (version < dbDesiredVersion)) {
         console.warn('Flushing database!');
         // FIXME: FLUSHDB for redis
-        if (redis) {
+        if (redis1) {
             await flushSet('invites');
             await flushSet('ids');
             console.log('flushed');
