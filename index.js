@@ -8,7 +8,7 @@ const morgan = require('morgan')
 const redis = process.env.REDIS_URL && require('redis').createClient(process.env.REDIS_URL);
 
 const { pseudo, distance, jsonHead } = require('@highfidelity/express-utilities');
-const accounts = require('../bigworld/accounts/index'); //FIXME!! '@highfidelity/accounts');
+const accounts = require('@highfidelity/accounts');
 
 process.title = "p2p-load-test";
 const app = express();
