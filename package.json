@@ -1,6 +1,6 @@
 {
     "name": "web-connections",
-    "version": "0.0.19",
+    "version": "0.0.20",
     "description": "Test bed for investigating p2p connectivity between web pages",
     "main": "index.js",
     "scripts": {
@@ -13,13 +13,14 @@
         "node": "10.x"
     },
     "dependencies": {
+        "@highfidelity/accounts": "0.0.3",
+        "@highfidelity/express-utilities": "0.0.1",
         "@tensorflow/tfjs-node": "^1.7.2",
         "body-parser": "^1.19.0",
         "canvas": "^2.6.1",
         "express": "^4.17.1",
         "express-ws": "^4.0.0",
         "face-api.js": "^0.22.2",
-        "ki1r0y.lock": "^1.0.4",
         "morgan": "^1.9.1",
         "qrcode-generator": "^1.4.4",
         "redis": "^3.0.2",
