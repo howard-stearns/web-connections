@@ -52,7 +52,7 @@ function deleteCredential(id) {
     setCredential({id, password: DELETED_CREDENTIAL_PROPERTY_VALUE,
                    name: DELETED_CREDENTIAL_PROPERTY_VALUE});
 }
-const dbVersion = 8;
+const dbVersion = 11;
 var version = getDb('version');
 if (version && (version < dbVersion)) {
     alert('Clearing local db. You should probably clear your browser passwords for https://web-connections.herokuapp.com before proceeding! (E.g., chrome://settings/passwords and look for web-connection.herokuapp - Ask Howard.)');

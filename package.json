@@ -13,8 +13,8 @@
         "node": "10.x"
     },
     "dependencies": {
-        "@highfidelity/accounts": "^0.0.4",
-        "@highfidelity/express-utilities": "0.0.1",
+        "@highfidelity/accounts": "^0.0.5",
+        "@highfidelity/express-utilities": "0.0.4",
         "@tensorflow/tfjs-node": "^1.7.2",
         "body-parser": "^1.19.0",
         "canvas": "^2.6.1",
