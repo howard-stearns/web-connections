@@ -7,7 +7,7 @@ const https = require('https'); // for forwarding to hifi-telemetric
 const morgan = require('morgan')
 const redis = process.env.REDIS_URL && require('redis').createClient(process.env.REDIS_URL);
 
-const accounts = require('@highfidelity/accounts');
+//FIXME const accounts = require('@highfidelity/accounts');
 const { pseudo, distance, jsonHead } = require('@highfidelity/express-utilities');
 const { getDbString, setDbString, flushAll } = require('@highfidelity/key-value-store');
 
@@ -30,9 +30,12 @@ function rawBodySaver(req, res, buf, encoding) {
 app.use(bodyParser.json({verify: rawBodySaver, limit: '50mb'}));
 app.use(bodyParser.urlencoded({extended: true}));
 
-accounts.configure({app}) // Must be after bodyParser.
+/* FIXME
+accounts.configure({app
+                    //,redis: require('redis').createClient("redis://localhost:6380")
+                   }) // Must be after bodyParser.
     .then(_ => {
-        const dbDesiredVersion = 11;
+        const dbDesiredVersion = 12;
         const dbVersionKey = 'dbVersion';
         getDbString(dbVersionKey).then(async version => {
             console.log('Existing db version:', version, 'desired:', dbDesiredVersion);
@@ -44,6 +47,7 @@ accounts.configure({app}) // Must be after bodyParser.
             }
         });
     });
+*/
 
 const CREDITS_PER_MS = 1.667;
 app.post('/upload', function (req, res) {
