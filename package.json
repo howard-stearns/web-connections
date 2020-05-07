@@ -8,7 +8,7 @@
         "test": "jasmine",
         "pretest": "jasmine init; (npm start &); sleep 2",
         "posttest": "pkill p2p-load-test",
-        "build": "webpack --mode=development --display-modules; cp dist/main.js public/account.js"
+        "buildx": "webpack --mode=development --display-modules; cp dist/main.js public/account.js"
     },
     "engines": {
         "node": "10.x"
